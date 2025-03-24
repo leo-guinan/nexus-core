@@ -64,6 +64,8 @@ class GladiaTranscriber:
             transcript = json.loads(response)
             if "transcription" in transcript:
                 logger.info(f"Transcription: {transcript['transcription']}")
+            # Add a small delay to avoid overwhelming the system
+            await asyncio.sleep(0.01)  # 10ms delay
             
     async def _convert_to_pcm(self, audio_data):
         try:
@@ -76,13 +78,7 @@ class GladiaTranscriber:
                 f.write(audio_data)
             
             # Convert AAC to PCM using ffmpeg
-            stream = ffmpeg.input(aac_path)
-            stream = ffmpeg.output(stream, pcm_path,
-                                 acodec='pcm_s16le',
-                                 ac=1,
-                                 ar=16000,
-                                 f='s16le')
-            await asyncio.create_subprocess_exec(
+            process = await asyncio.create_subprocess_exec(
                 'ffmpeg',
                 '-i', aac_path,
                 '-f', 's16le',
@@ -94,13 +90,23 @@ class GladiaTranscriber:
                 stderr=asyncio.subprocess.PIPE
             )
             
+            # Wait for the conversion to complete
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
+                return None
+                
             # Read PCM data
             with open(pcm_path, 'rb') as f:
                 pcm_data = f.read()
             
             # Cleanup temporary files
-            os.remove(aac_path)
-            os.remove(pcm_path)
+            try:
+                os.remove(aac_path)
+                os.remove(pcm_path)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp files: {e}")
             
             return pcm_data
         except Exception as e:
