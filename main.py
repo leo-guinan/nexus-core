@@ -86,26 +86,36 @@ class GladiaTranscriber:
             
     async def _convert_to_pcm(self, audio_data):
         try:
-            # Write AAC data to temporary file
+            # Write AAC data to temporary file with ADTS header
             self.chunk_counter += 1
             aac_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.aac")
             pcm_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.pcm")
             
+            # ADTS header (7 bytes)
+            # Sync word (12 bits), MPEG-4 (1 bit), Layer (2 bits), Protection absent (1 bit)
+            adts_header = bytearray([0xFF, 0xF1])
+            # Profile (2 bits), Sampling freq (4 bits), Private (1 bit), Channel config (3 bits)
+            adts_header.append(0x40 | (4 << 2) | 1)  # AAC-LC, 44.1kHz, 2 channels
+            # Original/copy (1 bit), Home (1 bit), Copyright ID (1 bit), Length (13 bits)
+            frame_length = len(audio_data) + 7  # ADTS header size is 7 bytes
+            adts_header.append((frame_length >> 11) & 0x03)
+            adts_header.append((frame_length >> 3) & 0xFF)
+            adts_header.append(((frame_length & 0x07) << 5) | 0x1F)
+            adts_header.append(0xFC)
+            
             with open(aac_path, 'wb') as f:
+                f.write(adts_header)
                 f.write(audio_data)
             
-            # Convert AAC to PCM using ffmpeg with explicit format and increased analysis
+            # Convert AAC to PCM using ffmpeg
             process = await asyncio.create_subprocess_exec(
                 'ffmpeg',
-                '-f', 'aac',  # Force AAC format
-                '-analyzeduration', '10M',  # Increase analysis time
-                '-probesize', '10M',      # Increase probe size
-                '-i', aac_path,
-                '-f', 's16le',
-                '-acodec', 'pcm_s16le',
-                '-ac', '1',
-                '-ar', '16000',
                 '-y',  # Overwrite output file
+                '-i', aac_path,
+                '-f', 's16le',  # Output format
+                '-acodec', 'pcm_s16le',  # Output codec
+                '-ac', '1',  # Mono
+                '-ar', '16000',  # 16kHz
                 pcm_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
@@ -115,25 +125,8 @@ class GladiaTranscriber:
             stdout, stderr = await process.communicate()
             
             if process.returncode != 0:
-                # Try alternative approach with raw AAC
-                process = await asyncio.create_subprocess_exec(
-                    'ffmpeg',
-                    '-f', 'data',  # Try as raw data
-                    '-i', aac_path,
-                    '-f', 's16le',
-                    '-acodec', 'pcm_s16le',
-                    '-ac', '1',
-                    '-ar', '16000',
-                    '-y',
-                    pcm_path,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await process.communicate()
-                
-                if process.returncode != 0:
-                    logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
-                    return None
+                logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
+                return None
                 
             # Read PCM data
             try:
@@ -154,7 +147,7 @@ class GladiaTranscriber:
                     logger.warning(f"Failed to cleanup temp files: {e}")
             
         except Exception as e:
-            logger.error(f"Failed to convert audio: {e}")
+            logger.error(f"Failed to convert audio: {e}", exc_info=True)
             return None
         
     async def close(self):
