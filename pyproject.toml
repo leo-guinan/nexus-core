@@ -5,5 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.115.12",
+    "ffmpeg-python>=0.2.0",
     "pyrtmp>=0.3.1",
+    "requests>=2.32.3",
+    "uvicorn>=0.34.0",
+    "websockets>=15.0.1",
 ]
