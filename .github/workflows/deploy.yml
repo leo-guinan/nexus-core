@@ -30,7 +30,7 @@ jobs:
         with:
           host: 5.161.110.155
           username: root
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
             docker pull ghcr.io/${{ github.repository }}:latest
             docker stop rtmp-server || true
