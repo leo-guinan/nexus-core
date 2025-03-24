@@ -216,13 +216,16 @@ class RTMP2FLVController(SimpleRTMPController):
         session.state.write(0, message.to_raw_meta(), FLVMediaType.OBJECT)
         # Try to get audio configuration from metadata
         try:
-            meta = message.to_meta()
-            if 'audiocodecid' in meta:
-                logger.info(f"Audio codec ID: {meta['audiocodecid']}")
-            if 'audiosamplerate' in meta:
-                logger.info(f"Audio sample rate: {meta['audiosamplerate']}")
-            if 'audiochannels' in meta:
-                logger.info(f"Audio channels: {meta['audiochannels']}")
+            # Parse raw metadata
+            meta = message.payload.decode('utf-8')
+            logger.debug(f"Raw metadata: {meta}")
+            
+            # Extract audio configuration if available
+            if '@setDataFrame' in meta:
+                if 'audiocodecid' in meta:
+                    logger.info(f"Audio codec ID found in metadata")
+                if 'audiosamplerate' in meta:
+                    logger.info(f"Audio sample rate found in metadata")
         except Exception as e:
             logger.error(f"Failed to parse metadata: {e}")
         await super().on_metadata(session, message)
@@ -234,52 +237,63 @@ class RTMP2FLVController(SimpleRTMPController):
     async def on_audio_message(self, session, message) -> None:
         session.state.write(message.timestamp, message.payload, FLVMediaType.AUDIO)
         
-        # Initialize audio configuration from first audio packet
-        if not self.audio_config:
-            try:
-                # First byte of FLV audio tag contains audio format info
-                audio_tag = message.payload[0]
-                sound_format = (audio_tag >> 4) & 0x0F  # First 4 bits
-                sound_rate = (audio_tag >> 2) & 0x03    # Next 2 bits
-                sound_size = (audio_tag >> 1) & 0x01    # Next 1 bit
-                sound_type = audio_tag & 0x01           # Last bit
+        try:
+            # First byte of FLV audio tag contains audio format info
+            audio_tag = message.payload[0]
+            sound_format = (audio_tag >> 4) & 0x0F  # First 4 bits
+            sound_rate = (audio_tag >> 2) & 0x03    # Next 2 bits
+            sound_size = (audio_tag >> 1) & 0x01    # Next 1 bit
+            sound_type = audio_tag & 0x01           # Last bit
+            
+            # Log audio format details for debugging
+            if not self.audio_config:
+                logger.debug(f"Audio format: {sound_format}, rate: {sound_rate}, size: {sound_size}, type: {sound_type}")
+            
+            # For AAC (sound_format == 10), second byte is AACPacketType
+            if sound_format == 10:  # AAC
+                aac_packet_type = message.payload[1]
+                if aac_packet_type == 0 and not self.audio_config:  # AAC sequence header
+                    # Extract AAC configuration
+                    aac_config = message.payload[2:]
+                    logger.info(f"AAC config received: {aac_config.hex()}")
+                    
+                    # Parse AAC config
+                    aac_profile = (aac_config[0] >> 3) & 0x1F
+                    aac_sampling_freq = ((aac_config[0] & 0x07) << 1) | ((aac_config[1] >> 7) & 0x01)
+                    aac_channels = (aac_config[1] >> 3) & 0x0F
+                    
+                    logger.info(f"AAC Profile: {aac_profile}, Sampling Freq Index: {aac_sampling_freq}, Channels: {aac_channels}")
+                    
+                    self.audio_config = {
+                        'format': 'aac',
+                        'profile': aac_profile,
+                        'sampling_freq_index': aac_sampling_freq,
+                        'channels': aac_channels,
+                        'rate_idx': sound_rate,
+                        'config': aac_config
+                    }
+                    # Initialize transcriber now that we have config
+                    self.transcriber = GladiaTranscriber(self.gladia_api_key)
+                    return  # Don't process AAC sequence header
                 
-                # For AAC (sound_format == 10), second byte is AACPacketType
-                # 0 = AAC sequence header, 1 = AAC raw
-                if sound_format == 10:  # AAC
-                    aac_packet_type = message.payload[1]
-                    if aac_packet_type == 0:  # AAC sequence header
-                        # Extract AAC configuration
-                        aac_config = message.payload[2:]
-                        logger.info(f"AAC config received: {aac_config.hex()}")
-                        self.audio_config = {
-                            'format': 'aac',
-                            'rate_idx': sound_rate,
-                            'channels': 2 if sound_type == 1 else 1,
-                            'config': aac_config
-                        }
-                        # Initialize transcriber now that we have config
-                        self.transcriber = GladiaTranscriber(self.gladia_api_key)
-                        return  # Don't process AAC sequence header
-                    
-                    # Only process AAC raw packets (type 1)
-                    if aac_packet_type != 1:
-                        return
-                    
-                    # Skip AAC packet type byte for raw packets
-                    audio_data = message.payload[2:]
-                else:
-                    audio_data = message.payload[1:]  # Skip FLV audio tag
-                    
-                # Send audio to Gladia for transcription
-                if self.transcriber:
-                    try:
-                        await self.transcriber.process_audio(audio_data)
-                    except Exception as e:
-                        logger.error(f"Failed to transcribe audio: {e}")
+                # Only process AAC raw packets (type 1)
+                if aac_packet_type != 1:
+                    return
                 
-            except Exception as e:
-                logger.error(f"Failed to process audio message: {e}")
+                # Skip AAC packet type byte for raw packets
+                audio_data = message.payload[2:]
+            else:
+                audio_data = message.payload[1:]  # Skip FLV audio tag
+                
+            # Send audio to Gladia for transcription
+            if self.transcriber:
+                try:
+                    await self.transcriber.process_audio(audio_data)
+                except Exception as e:
+                    logger.error(f"Failed to transcribe audio: {e}")
+            
+        except Exception as e:
+            logger.error(f"Failed to process audio message: {e}", exc_info=True)
         
         await super().on_audio_message(session, message)
 
