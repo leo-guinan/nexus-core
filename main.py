@@ -26,6 +26,9 @@ class GladiaTranscriber:
         self.session_id = None
         self.temp_dir = tempfile.mkdtemp()
         self.chunk_counter = 0
+        self.audio_buffer = []
+        self.buffer_size = 0
+        self.max_buffer_size = 4096  # Buffer up to 4KB of audio before processing
         
     async def start_session(self):
         url = "https://api.gladia.io/v2/live"
@@ -56,14 +59,28 @@ class GladiaTranscriber:
     async def process_audio(self, audio_data):
         if not self.ws:
             await self.start_session()
+        
+        # Add to buffer
+        self.audio_buffer.append(audio_data)
+        self.buffer_size += len(audio_data)
+        
+        # Process if buffer is full
+        if self.buffer_size >= self.max_buffer_size:
+            # Concatenate all buffered audio
+            combined_audio = b''.join(self.audio_buffer)
+            pcm_data = await self._convert_to_pcm(combined_audio)
             
-        pcm_data = await self._convert_to_pcm(audio_data)
-        if pcm_data:
-            await self.ws.send(pcm_data)
-            response = await self.ws.recv()
-            transcript = json.loads(response)
-            if "transcription" in transcript:
-                logger.info(f"Transcription: {transcript['transcription']}")
+            # Clear buffer
+            self.audio_buffer = []
+            self.buffer_size = 0
+            
+            if pcm_data:
+                await self.ws.send(pcm_data)
+                response = await self.ws.recv()
+                transcript = json.loads(response)
+                if "transcription" in transcript:
+                    logger.info(f"Transcription: {transcript['transcription']}")
+            
             # Add a small delay to avoid overwhelming the system
             await asyncio.sleep(0.01)  # 10ms delay
             
@@ -74,17 +91,36 @@ class GladiaTranscriber:
             aac_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.aac")
             pcm_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.pcm")
             
+            # Write AAC data with ADTS header
+            # AAC-LC, 44.1kHz, stereo
+            adts_header = bytes([
+                0xFF, 0xF1,  # Sync word + MPEG-4 + Layer + Protection absent
+                0x50,        # AAC-LC + 44.1kHz + Private bit
+                0x80,        # Channel config (stereo) + Original + Home + Copyright ID bit + Copyright ID start
+                0x00,        # Frame length will be updated
+                0xFC, 0x00   # Buffer fullness + Number of AAC frames - 1
+            ])
+            
+            frame_length = len(audio_data) + len(adts_header)
+            adts_header = bytearray(adts_header)
+            adts_header[3] |= (frame_length >> 11) & 0x03
+            adts_header[4] = (frame_length >> 3) & 0xFF
+            adts_header[5] = ((frame_length & 0x07) << 5) | 0x1F
+            
             with open(aac_path, 'wb') as f:
+                f.write(bytes(adts_header))
                 f.write(audio_data)
             
-            # Convert AAC to PCM using ffmpeg
+            # Convert AAC to PCM using ffmpeg with explicit format
             process = await asyncio.create_subprocess_exec(
                 'ffmpeg',
+                '-f', 'aac',  # Force AAC format
                 '-i', aac_path,
                 '-f', 's16le',
                 '-acodec', 'pcm_s16le',
                 '-ac', '1',
                 '-ar', '16000',
+                '-y',  # Overwrite output file
                 pcm_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
@@ -114,6 +150,17 @@ class GladiaTranscriber:
             return None
         
     async def close(self):
+        # Process any remaining buffered audio
+        if self.audio_buffer:
+            combined_audio = b''.join(self.audio_buffer)
+            pcm_data = await self._convert_to_pcm(combined_audio)
+            if pcm_data and self.ws:
+                await self.ws.send(pcm_data)
+                response = await self.ws.recv()
+                transcript = json.loads(response)
+                if "transcription" in transcript:
+                    logger.info(f"Final transcription: {transcript['transcription']}")
+        
         if self.ws:
             await self.ws.close()
         try:
