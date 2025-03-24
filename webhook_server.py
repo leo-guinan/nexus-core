@@ -1,39 +1,48 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+from fastapi import FastAPI, WebSocket
+from fastapi.responses import JSONResponse
 import logging
+import json
 import asyncio
-from typing import Optional, Dict, Any
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-class StreamEvent(BaseModel):
-    event_type: str
-    stream_key: str
-    metadata: Optional[Dict[str, Any]] = None
+# Store active WebSocket connections
+active_connections = []
 
-async def handle_stream_start(event: StreamEvent):
-    """
-    Handle stream start event. Add your custom logic here.
-    For example:
-    - Send notifications
-    - Start recording
-    - Update database
-    - Call other services
-    """
-    logger.info(f"Stream started: {event.stream_key}")
-    logger.info(f"Metadata: {event.metadata}")
-    # Add your custom logic here
+@app.websocket("/ws/transcription")
+async def transcription_websocket(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.append(websocket)
+    try:
+        while True:
+            # Receive transcription data
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            
+            # Log transcription
+            timestamp = datetime.fromtimestamp(message["timestamp"] / 1000).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            status = "FINAL" if message["is_final"] else "PARTIAL"
+            logger.info(f"[{timestamp}] [{status}] {message['text']}")
+            
+            # Write to log file
+            with open("transcriptions.log", "a") as f:
+                f.write(f"[{timestamp}] [{status}] {message['text']}\n")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+    finally:
+        active_connections.remove(websocket)
+        await websocket.close()
 
 @app.post("/webhook")
-async def webhook(event: StreamEvent, background_tasks: BackgroundTasks):
-    if event.event_type == "stream_start":
-        background_tasks.add_task(handle_stream_start, event)
-        return {"status": "processing"}
-    else:
-        raise HTTPException(status_code=400, detail="Unsupported event type")
+async def webhook(data: dict):
+    if data.get("event_type") == "stream_start":
+        logger.info(f"Stream started: {data.get('stream_key')}")
+        logger.info(f"Metadata: {data.get('metadata')}")
+    return JSONResponse(content={"status": "ok"})
 
 @app.get("/health")
 async def health_check():

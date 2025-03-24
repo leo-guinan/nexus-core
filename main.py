@@ -9,6 +9,7 @@ import wave
 import audioop
 import ffmpeg
 import tempfile
+import time
 
 from pyrtmp import StreamClosedException
 from pyrtmp.flv import FLVFileWriter, FLVMediaType
@@ -20,9 +21,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class GladiaTranscriber:
-    def __init__(self, api_key):
+    def __init__(self, api_key, transcription_ws_url="ws://localhost:8000/ws/transcription"):
         self.api_key = api_key
         self.ws = None
+        self.transcription_ws = None
         self.session_id = None
         self.temp_dir = tempfile.mkdtemp()
         self.chunk_counter = 0
@@ -30,9 +32,32 @@ class GladiaTranscriber:
         self.buffer_size = 0
         self.max_buffer_size = 4096  # Buffer up to 4KB of audio before processing
         self.aac_config = None  # Store AAC configuration
+        self.transcription_ws_url = transcription_ws_url
         
     def set_aac_config(self, config):
         self.aac_config = config
+        
+    async def connect_transcription_ws(self):
+        if not self.transcription_ws:
+            try:
+                self.transcription_ws = await websockets.connect(self.transcription_ws_url)
+                logger.info("Connected to transcription WebSocket")
+            except Exception as e:
+                logger.error(f"Failed to connect to transcription WebSocket: {e}")
+                
+    async def send_transcription(self, text, is_final=False):
+        if self.transcription_ws:
+            try:
+                message = {
+                    "text": text,
+                    "is_final": is_final,
+                    "timestamp": int(time.time() * 1000)
+                }
+                await self.transcription_ws.send(json.dumps(message))
+            except Exception as e:
+                logger.error(f"Failed to send transcription: {e}")
+                # Try to reconnect
+                await self.connect_transcription_ws()
         
     async def start_session(self):
         url = "https://api.gladia.io/v2/live"
@@ -64,6 +89,9 @@ class GladiaTranscriber:
         if not self.ws:
             await self.start_session()
         
+        if not self.transcription_ws:
+            await self.connect_transcription_ws()
+        
         # Add to buffer
         self.audio_buffer.append(audio_data)
         self.buffer_size += len(audio_data)
@@ -82,8 +110,19 @@ class GladiaTranscriber:
                 await self.ws.send(pcm_data)
                 response = await self.ws.recv()
                 transcript = json.loads(response)
-                if "transcription" in transcript:
-                    logger.info(f"Transcription: {transcript['transcription']}")
+                
+                # Handle different types of messages from Gladia
+                if transcript.get("type") == "transcript":
+                    # Final transcription
+                    if "transcription" in transcript.get("transcription", {}):
+                        text = transcript["transcription"]["transcription"]
+                        await self.send_transcription(text, is_final=True)
+                        logger.info(f"Final transcription: {text}")
+                elif "transcription" in transcript:
+                    # Partial transcription
+                    text = transcript["transcription"]
+                    await self.send_transcription(text, is_final=False)
+                    logger.info(f"Partial transcription: {text}")
             
             # Add a small delay to avoid overwhelming the system
             await asyncio.sleep(0.01)  # 10ms delay
@@ -195,10 +234,14 @@ class GladiaTranscriber:
                 response = await self.ws.recv()
                 transcript = json.loads(response)
                 if "transcription" in transcript:
-                    logger.info(f"Final transcription: {transcript['transcription']}")
+                    text = transcript["transcription"]
+                    await self.send_transcription(text, is_final=True)
+                    logger.info(f"Final transcription: {text}")
         
         if self.ws:
             await self.ws.close()
+        if self.transcription_ws:
+            await self.transcription_ws.close()
         try:
             os.rmdir(self.temp_dir)
         except:
@@ -206,11 +249,12 @@ class GladiaTranscriber:
 
 class RTMP2FLVController(SimpleRTMPController):
 
-    def __init__(self, output_directory: str, gladia_api_key: str, webhook_url: str = "http://localhost:8000/webhook"):
+    def __init__(self, output_directory: str, gladia_api_key: str, webhook_url: str = "http://localhost:8000/webhook", transcription_ws_url: str = "ws://localhost:8000/ws/transcription"):
         self.output_directory = output_directory
         self.transcriber = None  # Initialize later when we have audio config
         self.gladia_api_key = gladia_api_key
         self.webhook_url = webhook_url
+        self.transcription_ws_url = transcription_ws_url
         self.audio_config = None
         super().__init__()
 
@@ -301,7 +345,7 @@ class RTMP2FLVController(SimpleRTMPController):
                         'config': aac_config
                     }
                     # Initialize transcriber now that we have config
-                    self.transcriber = GladiaTranscriber(self.gladia_api_key)
+                    self.transcriber = GladiaTranscriber(self.gladia_api_key, self.transcription_ws_url)
                     self.transcriber.set_aac_config(self.audio_config)
                     return  # Don't process AAC sequence header
                 
