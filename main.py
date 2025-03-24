@@ -91,30 +91,15 @@ class GladiaTranscriber:
             aac_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.aac")
             pcm_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.pcm")
             
-            # Write AAC data with ADTS header
-            # AAC-LC, 44.1kHz, stereo
-            adts_header = bytes([
-                0xFF, 0xF1,  # Sync word + MPEG-4 + Layer + Protection absent
-                0x50,        # AAC-LC + 44.1kHz + Private bit
-                0x80,        # Channel config (stereo) + Original + Home + Copyright ID bit + Copyright ID start
-                0x00,        # Frame length will be updated
-                0xFC, 0x00   # Buffer fullness + Number of AAC frames - 1
-            ])
-            
-            frame_length = len(audio_data) + len(adts_header)
-            adts_header = bytearray(adts_header)
-            adts_header[3] |= (frame_length >> 11) & 0x03
-            adts_header[4] = (frame_length >> 3) & 0xFF
-            adts_header[5] = ((frame_length & 0x07) << 5) | 0x1F
-            
             with open(aac_path, 'wb') as f:
-                f.write(bytes(adts_header))
                 f.write(audio_data)
             
-            # Convert AAC to PCM using ffmpeg with explicit format
+            # Convert AAC to PCM using ffmpeg with explicit format and increased analysis
             process = await asyncio.create_subprocess_exec(
                 'ffmpeg',
                 '-f', 'aac',  # Force AAC format
+                '-analyzeduration', '10M',  # Increase analysis time
+                '-probesize', '10M',      # Increase probe size
                 '-i', aac_path,
                 '-f', 's16le',
                 '-acodec', 'pcm_s16le',
@@ -130,21 +115,44 @@ class GladiaTranscriber:
             stdout, stderr = await process.communicate()
             
             if process.returncode != 0:
-                logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
-                return None
+                # Try alternative approach with raw AAC
+                process = await asyncio.create_subprocess_exec(
+                    'ffmpeg',
+                    '-f', 'data',  # Try as raw data
+                    '-i', aac_path,
+                    '-f', 's16le',
+                    '-acodec', 'pcm_s16le',
+                    '-ac', '1',
+                    '-ar', '16000',
+                    '-y',
+                    pcm_path,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode != 0:
+                    logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
+                    return None
                 
             # Read PCM data
-            with open(pcm_path, 'rb') as f:
-                pcm_data = f.read()
-            
-            # Cleanup temporary files
             try:
-                os.remove(aac_path)
-                os.remove(pcm_path)
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp files: {e}")
+                with open(pcm_path, 'rb') as f:
+                    pcm_data = f.read()
+                return pcm_data if len(pcm_data) > 0 else None
+            except FileNotFoundError:
+                logger.error("PCM file not created")
+                return None
+            finally:
+                # Cleanup temporary files
+                try:
+                    if os.path.exists(aac_path):
+                        os.remove(aac_path)
+                    if os.path.exists(pcm_path):
+                        os.remove(pcm_path)
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp files: {e}")
             
-            return pcm_data
         except Exception as e:
             logger.error(f"Failed to convert audio: {e}")
             return None
@@ -172,8 +180,10 @@ class RTMP2FLVController(SimpleRTMPController):
 
     def __init__(self, output_directory: str, gladia_api_key: str, webhook_url: str = "http://localhost:8000/webhook"):
         self.output_directory = output_directory
-        self.transcriber = GladiaTranscriber(gladia_api_key)
+        self.transcriber = None  # Initialize later when we have audio config
+        self.gladia_api_key = gladia_api_key
         self.webhook_url = webhook_url
+        self.audio_config = None
         super().__init__()
 
     async def on_ns_publish(self, session, message) -> None:
@@ -204,6 +214,17 @@ class RTMP2FLVController(SimpleRTMPController):
 
     async def on_metadata(self, session, message) -> None:
         session.state.write(0, message.to_raw_meta(), FLVMediaType.OBJECT)
+        # Try to get audio configuration from metadata
+        try:
+            meta = message.to_meta()
+            if 'audiocodecid' in meta:
+                logger.info(f"Audio codec ID: {meta['audiocodecid']}")
+            if 'audiosamplerate' in meta:
+                logger.info(f"Audio sample rate: {meta['audiosamplerate']}")
+            if 'audiochannels' in meta:
+                logger.info(f"Audio channels: {meta['audiochannels']}")
+        except Exception as e:
+            logger.error(f"Failed to parse metadata: {e}")
         await super().on_metadata(session, message)
 
     async def on_video_message(self, session, message) -> None:
@@ -212,16 +233,60 @@ class RTMP2FLVController(SimpleRTMPController):
 
     async def on_audio_message(self, session, message) -> None:
         session.state.write(message.timestamp, message.payload, FLVMediaType.AUDIO)
-        # Send audio to Gladia for transcription
-        try:
-            await self.transcriber.process_audio(message.payload)
-        except Exception as e:
-            logger.error(f"Failed to transcribe audio: {e}")
+        
+        # Initialize audio configuration from first audio packet
+        if not self.audio_config:
+            try:
+                # First byte of FLV audio tag contains audio format info
+                audio_tag = message.payload[0]
+                sound_format = (audio_tag >> 4) & 0x0F  # First 4 bits
+                sound_rate = (audio_tag >> 2) & 0x03    # Next 2 bits
+                sound_size = (audio_tag >> 1) & 0x01    # Next 1 bit
+                sound_type = audio_tag & 0x01           # Last bit
+                
+                # For AAC (sound_format == 10), second byte is AACPacketType
+                # 0 = AAC sequence header, 1 = AAC raw
+                if sound_format == 10:  # AAC
+                    aac_packet_type = message.payload[1]
+                    if aac_packet_type == 0:  # AAC sequence header
+                        # Extract AAC configuration
+                        aac_config = message.payload[2:]
+                        logger.info(f"AAC config received: {aac_config.hex()}")
+                        self.audio_config = {
+                            'format': 'aac',
+                            'rate_idx': sound_rate,
+                            'channels': 2 if sound_type == 1 else 1,
+                            'config': aac_config
+                        }
+                        # Initialize transcriber now that we have config
+                        self.transcriber = GladiaTranscriber(self.gladia_api_key)
+                        return  # Don't process AAC sequence header
+                    
+                    # Only process AAC raw packets (type 1)
+                    if aac_packet_type != 1:
+                        return
+                    
+                    # Skip AAC packet type byte for raw packets
+                    audio_data = message.payload[2:]
+                else:
+                    audio_data = message.payload[1:]  # Skip FLV audio tag
+                    
+                # Send audio to Gladia for transcription
+                if self.transcriber:
+                    try:
+                        await self.transcriber.process_audio(audio_data)
+                    except Exception as e:
+                        logger.error(f"Failed to transcribe audio: {e}")
+                
+            except Exception as e:
+                logger.error(f"Failed to process audio message: {e}")
+        
         await super().on_audio_message(session, message)
 
     async def on_stream_closed(self, session: SessionManager, exception: StreamClosedException) -> None:
         session.state.close()
-        await self.transcriber.close()
+        if self.transcriber:
+            await self.transcriber.close()
         await super().on_stream_closed(session, exception)
 
 
