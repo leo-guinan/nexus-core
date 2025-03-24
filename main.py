@@ -29,6 +29,10 @@ class GladiaTranscriber:
         self.audio_buffer = []
         self.buffer_size = 0
         self.max_buffer_size = 4096  # Buffer up to 4KB of audio before processing
+        self.aac_config = None  # Store AAC configuration
+        
+    def set_aac_config(self, config):
+        self.aac_config = config
         
     async def start_session(self):
         url = "https://api.gladia.io/v2/live"
@@ -86,49 +90,81 @@ class GladiaTranscriber:
             
     async def _convert_to_pcm(self, audio_data):
         try:
-            # Write AAC data to temporary file with ADTS header
             self.chunk_counter += 1
             aac_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.aac")
             pcm_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.pcm")
+            wav_path = os.path.join(self.temp_dir, f"chunk_{self.chunk_counter}.wav")
             
-            # ADTS header (7 bytes)
-            # Sync word (12 bits), MPEG-4 (1 bit), Layer (2 bits), Protection absent (1 bit)
-            adts_header = bytearray([0xFF, 0xF1])
-            # Profile (2 bits), Sampling freq (4 bits), Private (1 bit), Channel config (3 bits)
-            adts_header.append(0x40 | (4 << 2) | 1)  # AAC-LC, 44.1kHz, 2 channels
-            # Original/copy (1 bit), Home (1 bit), Copyright ID (1 bit), Length (13 bits)
-            frame_length = len(audio_data) + 7  # ADTS header size is 7 bytes
-            adts_header.append((frame_length >> 11) & 0x03)
-            adts_header.append((frame_length >> 3) & 0xFF)
-            adts_header.append(((frame_length & 0x07) << 5) | 0x1F)
-            adts_header.append(0xFC)
-            
+            # Write AAC data with ADTS header for each frame
             with open(aac_path, 'wb') as f:
-                f.write(adts_header)
+                # Write AAC config if available
+                if self.aac_config:
+                    # ADTS header for config
+                    config_header = bytearray([0xFF, 0xF1])  # Sync word, MPEG-4, Layer, Protection absent
+                    config_header.append(((self.aac_config['profile'] - 1) << 6) | (self.aac_config['sampling_freq_index'] << 2) | ((self.aac_config['channels'] >> 2) & 0x01))
+                    config_header.append(((self.aac_config['channels'] & 0x03) << 6) | ((9) >> 11))  # 9 is length of config
+                    config_header.append((9 >> 3) & 0xFF)
+                    config_header.append(((9 & 0x07) << 5) | 0x1F)
+                    config_header.append(0xFC)
+                    f.write(config_header)
+                    f.write(self.aac_config['config'])
+                
+                # Write audio frame with ADTS header
+                frame_len = len(audio_data) + 7  # ADTS header size
+                header = bytearray([0xFF, 0xF1])  # Sync word, MPEG-4, Layer, Protection absent
+                if self.aac_config:
+                    header.append(((self.aac_config['profile'] - 1) << 6) | (self.aac_config['sampling_freq_index'] << 2) | ((self.aac_config['channels'] >> 2) & 0x01))
+                    header.append(((self.aac_config['channels'] & 0x03) << 6) | ((frame_len) >> 11))
+                else:
+                    header.append(0x40)  # AAC-LC, 44.1kHz
+                    header.append(0x20 | ((frame_len) >> 11))  # 2 channels
+                header.append((frame_len >> 3) & 0xFF)
+                header.append(((frame_len & 0x07) << 5) | 0x1F)
+                header.append(0xFC)
+                f.write(header)
                 f.write(audio_data)
             
-            # Convert AAC to PCM using ffmpeg
+            # First convert to WAV to ensure proper format
             process = await asyncio.create_subprocess_exec(
                 'ffmpeg',
-                '-y',  # Overwrite output file
+                '-y',
+                '-f', 'aac',
+                '-acodec', 'aac',
                 '-i', aac_path,
-                '-f', 's16le',  # Output format
-                '-acodec', 'pcm_s16le',  # Output codec
-                '-ac', '1',  # Mono
-                '-ar', '16000',  # 16kHz
+                '-acodec', 'pcm_s16le',
+                '-f', 'wav',
+                '-ac', '1',
+                '-ar', '16000',
+                wav_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                logger.error(f"FFmpeg conversion to WAV failed: {stderr.decode()}")
+                return None
+            
+            # Then convert WAV to raw PCM
+            process = await asyncio.create_subprocess_exec(
+                'ffmpeg',
+                '-y',
+                '-f', 'wav',
+                '-i', wav_path,
+                '-f', 's16le',
+                '-acodec', 'pcm_s16le',
                 pcm_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             
-            # Wait for the conversion to complete
             stdout, stderr = await process.communicate()
             
             if process.returncode != 0:
-                logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
+                logger.error(f"FFmpeg conversion to PCM failed: {stderr.decode()}")
                 return None
-                
-            # Read PCM data
+            
             try:
                 with open(pcm_path, 'rb') as f:
                     pcm_data = f.read()
@@ -138,13 +174,12 @@ class GladiaTranscriber:
                 return None
             finally:
                 # Cleanup temporary files
-                try:
-                    if os.path.exists(aac_path):
-                        os.remove(aac_path)
-                    if os.path.exists(pcm_path):
-                        os.remove(pcm_path)
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup temp files: {e}")
+                for path in [aac_path, wav_path, pcm_path]:
+                    try:
+                        if os.path.exists(path):
+                            os.remove(path)
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup temp file {path}: {e}")
             
         except Exception as e:
             logger.error(f"Failed to convert audio: {e}", exc_info=True)
@@ -267,6 +302,7 @@ class RTMP2FLVController(SimpleRTMPController):
                     }
                     # Initialize transcriber now that we have config
                     self.transcriber = GladiaTranscriber(self.gladia_api_key)
+                    self.transcriber.set_aac_config(self.audio_config)
                     return  # Don't process AAC sequence header
                 
                 # Only process AAC raw packets (type 1)
