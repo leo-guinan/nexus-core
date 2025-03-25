@@ -86,6 +86,7 @@ jobs:
                 - "--log.level=DEBUG"
                 - "--api.dashboard=true"
                 - "--api.insecure=false"
+                - "--certificatesresolvers.cloudflare.acme.dnschallenge.domains=core.maketheinternetweirdagain.com,ws.core.maketheinternetweirdagain.com,traefik.core.maketheinternetweirdagain.com"
               labels:
                 - "traefik.enable=true"
                 - "traefik.http.routers.dashboard.rule=Host(`traefik.core.maketheinternetweirdagain.com`)"
