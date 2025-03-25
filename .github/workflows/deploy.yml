@@ -88,7 +88,7 @@ jobs:
                 - "--api.insecure=false"
               labels:
                 - "traefik.enable=true"
-                - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN_NAME}`)"
+                - "traefik.http.routers.dashboard.rule=Host(`traefik.core.maketheinternetweirdagain.com`)"
                 - "traefik.http.routers.dashboard.service=api@internal"
                 - "traefik.http.routers.dashboard.entrypoints=websecure"
                 - "traefik.http.routers.dashboard.tls=true"
@@ -116,7 +116,7 @@ jobs:
                 - PORT=8000
               labels:
                 - "traefik.enable=true"
-                - "traefik.http.routers.websocket.rule=Host(`ws.${DOMAIN_NAME}`)"
+                - "traefik.http.routers.websocket.rule=Host(`ws.core.maketheinternetweirdagain.com`)"
                 - "traefik.http.routers.websocket.entrypoints=websecure"
                 - "traefik.http.routers.websocket.tls=true"
                 - "traefik.http.routers.websocket.tls.certresolver=cloudflare"
@@ -128,10 +128,10 @@ jobs:
               expose:
                 - "3000"
               environment:
-                - NEXT_PUBLIC_WS_URL=wss://ws.${DOMAIN_NAME}/ws/transcription
+                - NEXT_PUBLIC_WS_URL=wss://ws.core.maketheinternetweirdagain.com/ws/transcription
               labels:
                 - "traefik.enable=true"
-                - "traefik.http.routers.web.rule=Host(`${DOMAIN_NAME}`)"
+                - "traefik.http.routers.web.rule=Host(`core.maketheinternetweirdagain.com`)"
                 - "traefik.http.routers.web.entrypoints=websecure"
                 - "traefik.http.routers.web.tls=true"
                 - "traefik.http.routers.web.tls.certresolver=cloudflare"
@@ -192,7 +192,7 @@ jobs:
             GLADIA_API_KEY=${{ secrets.GLADIA_API_KEY }}
             CLOUDFLARE_EMAIL=${{ secrets.CLOUDFLARE_EMAIL }}
             CLOUDFLARE_API_KEY=${{ secrets.CLOUDFLARE_API_KEY }}
-            DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}
+            DOMAIN_NAME=core.maketheinternetweirdagain.com
             TRAEFIK_AUTH=${TRAEFIK_AUTH}
             EOF
             
