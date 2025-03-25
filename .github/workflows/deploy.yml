@@ -110,6 +110,25 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
             cd /opt/rtmp-host
+            
+            # Stop and remove existing containers
+            docker compose -f docker-compose.prod.yml down || true
+            
+            # Remove any orphaned containers using these ports
+            for port in 1935 8000 3000; do
+              container_id=$(docker ps -q --filter "publish=$port")
+              if [ ! -z "$container_id" ]; then
+                docker stop $container_id
+                docker rm $container_id
+              fi
+            done
+            
+            # Clean up unused networks
+            docker network prune -f
+            
+            # Set up environment
             echo "GLADIA_API_KEY=${{ secrets.GLADIA_API_KEY }}" > .env
+            
+            # Pull and start new containers
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
