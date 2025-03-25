@@ -71,6 +71,14 @@ class GladiaTranscriber:
             "sample_rate": 16000,
             "channels": 1,
             "model": "accurate",
+            "pre_processing": {
+                "audio_enhancer": True,
+                "speech_threshold": 0.9
+            },
+            "realtime_processing": {
+                "sentiment_analysis": True,
+                "named_entity_recognition": True
+            },
             "messages_config": {
                 "receive_partial_transcripts": True,
                 "receive_final_transcripts": True
