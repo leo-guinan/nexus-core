@@ -1,0 +1,14 @@
+[project]
+name = "rtmp-server"
+version = "0.1.0"
+description = "RTMP ingest server with Gladia transcription"
+dependencies = [
+    "pyrtmp>=0.3.1",
+    "websockets>=15.0.1",
+    "requests>=2.32.3",
+    "ffmpeg-python>=0.2.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build" 

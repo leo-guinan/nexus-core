@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  rtmp:
+    build:
+      context: ./apps/rtmp-server
+      dockerfile: Dockerfile
+    ports:
+      - "1935:1935"
+    environment:
+      - GLADIA_API_KEY=${GLADIA_API_KEY}
+      - WEBHOOK_URL=http://websocket:8000/webhook
+    depends_on:
+      - websocket
+    restart: unless-stopped
+
+  websocket:
+    build:
+      context: ./apps/websocket-server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/transcription
+    depends_on:
+      - websocket
+    restart: unless-stopped
+
+networks:
+  default:
+    name: rtmp-network 
