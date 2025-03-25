@@ -11,7 +11,10 @@ WORKDIR /app
 # Copy only requirements first to leverage Docker cache
 COPY pyproject.toml .
 
-# Install dependencies
+# Install build dependencies
+RUN pip install --no-cache-dir hatchling
+
+# Install project dependencies
 RUN pip install --no-cache-dir .
 
 # Copy source code
