@@ -56,7 +56,7 @@ jobs:
 
       - name: Generate production docker-compose
         run: |
-          cat > docker-compose.prod.yml << EOL
+          cat > docker-compose.prod.yml << 'EOL'
           services:
             traefik:
               image: traefik:v2.10
@@ -67,8 +67,8 @@ jobs:
                 - /var/run/docker.sock:/var/run/docker.sock:ro
                 - /opt/rtmp-host/traefik:/etc/traefik
               environment:
-                - CLOUDFLARE_EMAIL=\${CLOUDFLARE_EMAIL}
-                - CLOUDFLARE_API_KEY=\${CLOUDFLARE_API_KEY}
+                - CLOUDFLARE_EMAIL=${CLOUDFLARE_EMAIL}
+                - CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY}
               command:
                 - "--providers.docker=true"
                 - "--providers.docker.exposedbydefault=false"
@@ -79,19 +79,19 @@ jobs:
                 - "--entrypoints.websecure.address=:443"
                 - "--certificatesresolvers.cloudflare.acme.dnschallenge=true"
                 - "--certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare"
-                - "--certificatesresolvers.cloudflare.acme.email=\${CLOUDFLARE_EMAIL}"
+                - "--certificatesresolvers.cloudflare.acme.email=${CLOUDFLARE_EMAIL}"
                 - "--certificatesresolvers.cloudflare.acme.storage=/etc/traefik/acme.json"
                 - "--api.dashboard=true"
                 - "--api.insecure=false"
               labels:
                 - "traefik.enable=true"
-                - "traefik.http.routers.dashboard.rule=Host(\`traefik.\${DOMAIN_NAME}\`)"
+                - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN_NAME}`)"
                 - "traefik.http.routers.dashboard.service=api@internal"
                 - "traefik.http.routers.dashboard.entrypoints=websecure"
                 - "traefik.http.routers.dashboard.tls=true"
                 - "traefik.http.routers.dashboard.tls.certresolver=cloudflare"
                 - "traefik.http.routers.dashboard.middlewares=auth"
-                - "traefik.http.middlewares.auth.basicauth.users=\${TRAEFIK_AUTH}"
+                - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_AUTH}"
               restart: unless-stopped
 
             rtmp:
@@ -99,7 +99,7 @@ jobs:
               ports:
                 - "1935:1935"
               environment:
-                - GLADIA_API_KEY=\${GLADIA_API_KEY}
+                - GLADIA_API_KEY=${GLADIA_API_KEY}
                 - WEBHOOK_URL=http://websocket:8000/webhook
               depends_on:
                 - websocket
@@ -113,7 +113,7 @@ jobs:
                 - PORT=8000
               labels:
                 - "traefik.enable=true"
-                - "traefik.http.routers.websocket.rule=Host(\`ws.\${DOMAIN_NAME}\`)"
+                - "traefik.http.routers.websocket.rule=Host(`ws.${DOMAIN_NAME}`)"
                 - "traefik.http.routers.websocket.entrypoints=websecure"
                 - "traefik.http.routers.websocket.tls=true"
                 - "traefik.http.routers.websocket.tls.certresolver=cloudflare"
@@ -125,10 +125,10 @@ jobs:
               expose:
                 - "3000"
               environment:
-                - NEXT_PUBLIC_WS_URL=wss://ws.\${DOMAIN_NAME}/ws/transcription
+                - NEXT_PUBLIC_WS_URL=wss://ws.${DOMAIN_NAME}/ws/transcription
               labels:
                 - "traefik.enable=true"
-                - "traefik.http.routers.web.rule=Host(\`\${DOMAIN_NAME}\`)"
+                - "traefik.http.routers.web.rule=Host(`${DOMAIN_NAME}`)"
                 - "traefik.http.routers.web.entrypoints=websecure"
                 - "traefik.http.routers.web.tls=true"
                 - "traefik.http.routers.web.tls.certresolver=cloudflare"
@@ -181,18 +181,24 @@ jobs:
             touch traefik/acme.json
             chmod 600 traefik/acme.json
             
-            # Generate htpasswd for Traefik dashboard
-            echo ${{ secrets.TRAEFIK_PASSWORD }} | docker run --rm httpd:2.4-alpine htpasswd -nbB admin - > traefik/htpasswd
-            TRAEFIK_AUTH=$(cat traefik/htpasswd)
+            # Generate htpasswd for Traefik dashboard without newline
+            TRAEFIK_AUTH=$(echo '${{ secrets.TRAEFIK_PASSWORD }}' | docker run --rm --stdin httpd:2.4-alpine htpasswd -nbB admin - | tr -d '\n')
             
-            # Set up environment
-            cat > .env << EOF
+            # Set up environment (careful with quoting)
+            cat << 'EOF' > .env
             GLADIA_API_KEY=${{ secrets.GLADIA_API_KEY }}
             CLOUDFLARE_EMAIL=${{ secrets.CLOUDFLARE_EMAIL }}
             CLOUDFLARE_API_KEY=${{ secrets.CLOUDFLARE_API_KEY }}
             DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}
-            TRAEFIK_AUTH=$TRAEFIK_AUTH
+            TRAEFIK_AUTH=${TRAEFIK_AUTH}
             EOF
+            
+            # Replace the TRAEFIK_AUTH placeholder with actual value
+            sed -i "s|\${TRAEFIK_AUTH}|${TRAEFIK_AUTH}|g" .env
+            
+            # Debug: Show .env file structure without sensitive data
+            echo "Checking .env file structure (redacted values):"
+            sed 's/=.*/=REDACTED/' .env
             
             # Pull and start new containers
             docker compose -f docker-compose.prod.yml pull
