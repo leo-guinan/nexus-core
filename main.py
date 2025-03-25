@@ -113,17 +113,22 @@ class GladiaTranscriber:
                 
                 # Handle different types of messages from Gladia
                 if transcript.get("type") == "transcript":
-                    # Final transcription
-                    if "transcription" in transcript.get("transcription", {}):
-                        text = transcript["transcription"]["transcription"]
-                        await self.send_transcription(text, is_final=True)
-                        logger.info(f"Final transcription: {text}")
-                elif "transcription" in transcript:
-                    # Partial transcription
-                    text = transcript["transcription"]
+                    text = transcript.get("data", {}).get("text", "")
                     await self.send_transcription(text, is_final=False)
-                    logger.info(f"Partial transcription: {text}")
-            
+                elif transcript.get("type") == "named_entity_recognition":
+                    results = transcript.get("data", {}).get("results", {})
+                    logger.info(f"Named entity recognition: {results}")
+                    for result in results:
+                        logger.info(f"Named entity recognition: {result.get('entity_type')}: {result.get('text')}")
+                elif transcript.get("type") == "sentiment":
+                    pass       
+                elif transcript.get("type") == "post_final_transcript":
+                    # final transcription
+                    text = transcript.get("data", {}).get("text", "")
+                    await self.send_transcription(text, is_final=True)
+                    logger.info(f"Final transcription: {text}")
+
+               
             # Add a small delay to avoid overwhelming the system
             await asyncio.sleep(0.01)  # 10ms delay
             
