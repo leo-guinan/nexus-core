@@ -35,6 +35,16 @@ jobs:
           docker compose build
           docker compose push
 
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USERNAME }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          source: "docker-compose.yml,.env.example"
+          target: "/opt/rtmp-host"
+          strip_components: 0
+
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.0
         with:
