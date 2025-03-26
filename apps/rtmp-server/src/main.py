@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class GladiaTranscriber:
-    def __init__(self, api_key, transcription_ws_url="ws://localhost:8000/ws/transcription"):
+    def __init__(self, api_key, transcription_ws_url="ws://websocket:8000/ws/transcription"):
         self.api_key = api_key
         self.ws = None
         self.transcription_ws = None
@@ -262,7 +262,7 @@ class GladiaTranscriber:
 
 class RTMP2FLVController(SimpleRTMPController):
 
-    def __init__(self, output_directory: str, gladia_api_key: str, webhook_url: str = "http://localhost:8000/webhook", transcription_ws_url: str = "ws://localhost:8000/ws/transcription"):
+    def __init__(self, output_directory: str, gladia_api_key: str, webhook_url: str = "http://websocket:8000/webhook", transcription_ws_url: str = "ws://websocket:8000/ws/transcription"):
         self.output_directory = output_directory
         self.transcriber = None  # Initialize later when we have audio config
         self.gladia_api_key = gladia_api_key
@@ -392,7 +392,7 @@ class RTMP2FLVController(SimpleRTMPController):
 
 class SimpleServer(SimpleRTMPServer):
 
-    def __init__(self, output_directory: str, gladia_api_key: str, webhook_url: str = "http://localhost:8000/webhook"):
+    def __init__(self, output_directory: str, gladia_api_key: str, webhook_url: str = "http://websocket:8000/webhook"):
         self.output_directory = output_directory
         self.gladia_api_key = gladia_api_key
         self.webhook_url = webhook_url
@@ -414,7 +414,7 @@ class SimpleServer(SimpleRTMPServer):
 async def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     gladia_api_key = os.getenv("GLADIA_API_KEY")
-    webhook_url = os.getenv("WEBHOOK_URL", "http://localhost:8000/webhook")
+    webhook_url = os.getenv("WEBHOOK_URL", "http://websocket:8000/webhook")
     
     if not gladia_api_key:
         raise ValueError("GLADIA_API_KEY environment variable is required")
