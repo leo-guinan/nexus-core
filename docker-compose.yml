@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=rtmp
+      - POSTGRES_PASSWORD=rtmp
+      - POSTGRES_DB=rtmp
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rtmp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   rtmp:
     build:
       context: ./apps/rtmp-server
@@ -10,8 +27,12 @@ services:
     environment:
       - GLADIA_API_KEY=${GLADIA_API_KEY}
       - WEBHOOK_URL=http://websocket:8000/webhook
+      - DATABASE_URL=postgresql://rtmp:rtmp@postgres:5432/rtmp
     depends_on:
-      - websocket
+      postgres:
+        condition: service_healthy
+      websocket:
+        condition: service_started
     restart: unless-stopped
 
   websocket:
@@ -22,19 +43,43 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
+      - DATABASE_URL=postgresql://rtmp:rtmp@postgres:5432/rtmp
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
-  web:
+  mastra:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/agent/Dockerfile
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
-      - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/transcription
+      - PORT=3001
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - DATABASE_URL=postgresql://rtmp:rtmp@postgres:5432/rtmp
     depends_on:
-      - websocket
+      postgres:
+        condition: service_healthy
+      websocket:
+        condition: service_started
     restart: unless-stopped
+
+  migrations:
+    build:
+      context: ./apps/websocket-server
+      dockerfile: Dockerfile
+    command: python -malembic upgrade head
+    environment:
+      - DATABASE_URL=postgresql://rtmp:rtmp@postgres:5432/rtmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
 
 networks:
   default:

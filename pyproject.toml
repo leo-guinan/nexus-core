@@ -3,7 +3,15 @@ name = "rtmp-transcription-platform"
 version = "0.1.0"
 description = "RTMP live streaming platform with real-time transcription"
 authors = []
-dependencies = []
+dependencies = [
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.9",
+    "alembic>=1.13.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "websockets>=12.0",
+]
 
 [build-system]
 requires = ["hatchling"]
