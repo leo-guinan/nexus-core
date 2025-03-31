@@ -117,6 +117,7 @@ jobs:
               environment:
                 - PORT=8000
                 - DATABASE_URL=${DATABASE_URL}
+                - MASTRA_API_URL=http://mastra:3001
               labels:
                 - "traefik.enable=true"
                 - "traefik.http.routers.websocket.rule=Host(`ws.core.maketheinternetweirdagain.com`)"

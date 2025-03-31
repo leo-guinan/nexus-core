@@ -6,7 +6,6 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
     "build": "mastra build"
-    
   },
   "keywords": [],
   "author": "",
@@ -16,12 +15,17 @@
   "dependencies": {
     "@ai-sdk/openai": "^1.3.2",
     "@mastra/core": "^0.6.4",
+    "@mastra/github": "^1.1.14",
+    "@types/ws": "^8.18.0",
     "mastra": "^0.4.3",
+    "twitter-api-v2": "^1.22.0",
+    "ws": "^8.18.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^22.13.13",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
-  }
+  },
+  "packageManager": "pnpm@8.15.9+sha512.499434c9d8fdd1a2794ebf4552b3b25c0a633abcee5bb15e7b5de90f32f47b513aca98cd5cfd001c31f0db454bc3804edccd578501e4ca293a6816166bbd9f81"
 }

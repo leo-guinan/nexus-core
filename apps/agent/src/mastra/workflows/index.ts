@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { transcriptionWorkflow } from './transcriptionWorkflow';
 
 const llm = openai('gpt-4o');
 
@@ -180,4 +181,4 @@ const weatherWorkflow = new Workflow({
 
 weatherWorkflow.commit();
 
-export { weatherWorkflow };
+export { weatherWorkflow, transcriptionWorkflow };

@@ -16,9 +16,18 @@ from pyrtmp.flv import FLVFileWriter, FLVMediaType
 from pyrtmp.session_manager import SessionManager
 from pyrtmp.rtmp import SimpleRTMPController, RTMPProtocol, SimpleRTMPServer
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# Set pyrtmp logger to INFO level
+pyrtmp_logger = logging.getLogger('pyrtmp')
+pyrtmp_logger.setLevel(logging.INFO)
+
+# Set websockets logger to INFO level
+websockets_logger = logging.getLogger('websockets')
+websockets_logger.setLevel(logging.INFO)
 
 class GladiaTranscriber:
     def __init__(self, api_key, transcription_ws_url="ws://websocket:8000/ws/transcription"):
@@ -121,20 +130,38 @@ class GladiaTranscriber:
                 
                 # Handle different types of messages from Gladia
                 if transcript.get("type") == "transcript":
+                    print("Transcript type received from gladia")
                     text = transcript.get("data", {}).get("text", "")
                     await self.send_transcription(text, is_final=False)
                 elif transcript.get("type") == "named_entity_recognition":
-                    results = transcript.get("data", {}).get("results", {})
+                    print("Named entity recognition received from gladia")
+                    print(f"Transcript: {transcript}")
+                    results = transcript.get("data", {}).get("results", [])
+                    message = {
+                        "type": "named_entity_recognition",
+                        "data": {"results": results},
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    print("Sending named entity recognition")
+                    await self.transcription_ws.send(json.dumps(message))
                     logger.info(f"Named entity recognition: {results}")
-                    for result in results:
-                        logger.info(f"Named entity recognition: {result.get('entity_type')}: {result.get('text')}")
                 elif transcript.get("type") == "sentiment":
-                    pass       
+                    print("Sentiment analysis received from gladia")
+                    sentiment = transcript.get("data", {}).get("sentiment", {})
+                    message = {
+                        "type": "sentiment",
+                        "data": {"sentiment": sentiment},
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    await self.transcription_ws.send(json.dumps(message))
+                    logger.info(f"Sentiment analysis: {sentiment}")
                 elif transcript.get("type") == "post_final_transcript":
-                    # final transcription
                     text = transcript.get("data", {}).get("text", "")
                     await self.send_transcription(text, is_final=True)
                     logger.info(f"Final transcription: {text}")
+
+                else:
+                    print(f"Unknown message type received from gladia: {transcript.get('type')}")
 
                
             # Add a small delay to avoid overwhelming the system
@@ -303,7 +330,6 @@ class RTMP2FLVController(SimpleRTMPController):
         try:
             # Parse raw metadata
             meta = message.payload.decode('utf-8')
-            logger.debug(f"Raw metadata: {meta}")
             
             # Extract audio configuration if available
             if '@setDataFrame' in meta:
@@ -333,7 +359,6 @@ class RTMP2FLVController(SimpleRTMPController):
             # Log audio format details for debugging
             if not self.audio_config:
                 logger.debug(f"Audio format: {sound_format}, rate: {sound_rate}, size: {sound_size}, type: {sound_type}")
-            
             # For AAC (sound_format == 10), second byte is AACPacketType
             if sound_format == 10:  # AAC
                 aac_packet_type = message.payload[1]
@@ -384,7 +409,9 @@ class RTMP2FLVController(SimpleRTMPController):
         await super().on_audio_message(session, message)
 
     async def on_stream_closed(self, session: SessionManager, exception: StreamClosedException) -> None:
-        session.state.close()
+        # Only close if state is FLVFileWriter
+        if hasattr(session.state, 'close'):
+            session.state.close()
         if self.transcriber:
             await self.transcriber.close()
         await super().on_stream_closed(session, exception)

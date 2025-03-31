@@ -1,24 +1,24 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy only requirements first to leverage Docker cache
-COPY pyproject.toml .
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install build dependencies
-RUN pip install --no-cache-dir hatchling
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code first
-COPY src/ src/
+# Copy the rest of the application
+COPY src ./src
+COPY alembic ./alembic
+COPY alembic.ini .
 
-# Install project dependencies and package in editable mode
-RUN pip install --no-cache-dir -e .
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PORT=8000
 
-# Copy alembic config and migrations
-COPY alembic.ini alembic.ini
-COPY alembic/ alembic/
-
-# Expose WebSocket port
-EXPOSE 8000
-
-CMD ["python", "src/main.py"] 
+# Start the application
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"] 
