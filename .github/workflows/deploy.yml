@@ -182,7 +182,7 @@ jobs:
             
             # Create credentials directory and copy service account file
             mkdir -p credentials
-            echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' > credentials/service-account.json
+            echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' | jq '.' > credentials/service-account.json
             chmod 600 credentials/service-account.json
             
             # Generate htpasswd for Traefik dashboard without newline
