@@ -3,16 +3,33 @@ import json
 import logging
 from typing import List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from .api import MastraAPI
+from .api import MastraAPI, DocumentProcessor
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Initialize document processor
+document_processor = None
+
+def get_document_processor():
+    global document_processor
+    return document_processor
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize document processor
+    global document_processor
+    try:
+        document_processor = DocumentProcessor()
+        logger.info("Document processor initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize document processor: {e}", exc_info=True)
+        document_processor = None
     yield
+    # Cleanup
+    document_processor = None
 
 app = FastAPI(lifespan=lifespan)
 
@@ -35,9 +52,12 @@ class ConnectionManager:
         self.active_connections.append(websocket)
         logger.info(f"Client connected. Total connections: {len(self.active_connections)}")
 
-    def disconnect(self, websocket: WebSocket):
+    async def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
         logger.info(f"Client disconnected. Total connections: {len(self.active_connections)}")
+        # Close API session when all connections are closed
+        if not self.active_connections:
+            await self.mastra_api.close()
 
     async def broadcast(self, message: str):
         # Broadcast to all connected clients
@@ -54,14 +74,26 @@ class ConnectionManager:
                 # Extract entity text and type
                 entity_text = entity.get("text", "")
                 entity_type = entity.get("entity_type", "")
-                print(f"Entity text: {entity_text}, Entity type: {entity_type}")
+                logger.info(f"Processing entity: {entity_text} ({entity_type})")
+                
                 if entity_text and entity_type:
-                    # Tweet about the entity
-                    response = await self.mastra_api.send_message("Leo mentioned an entity")
-                    logger.info(f"Tweeted about entity: {entity_text} ({entity_type})")
-                    logger.debug(f"Tweet response: {response}")
+                    # Give the agent context about what was mentioned
+                    message = f"Someone mentioned {entity_type} '{entity_text}' in their stream. Send a tweet about this."
+                    logger.info(f"Sending to agent: {message}")
+                    
+                    response = await self.mastra_api.send_message(message)
+                    logger.info(f"Raw agent response: {json.dumps(response, indent=2)}")
+                    
+                    if not response:
+                        logger.error("Agent returned empty response")
+                        continue
+                        
+                    if isinstance(response, dict):
+                        logger.info(f"Agent response structure: {list(response.keys())}")
+                    
+                    logger.info(f"Processed entity: {entity_text} ({entity_type})")
             except Exception as e:
-                logger.error(f"Error tweeting about entity: {e}")
+                logger.error(f"Error handling entity: {e}", exc_info=True)
 
     async def handle_final_transcript(self, text: str, timestamp: int, stream_key: str):
         try:
@@ -127,6 +159,44 @@ async def webhook(data: dict):
     """Webhook endpoint for RTMP events"""
     logger.info(f"Received webhook: {data}")
     return {"status": "ok"}
+
+@app.post("/api/documents/upload")
+async def upload_document(file: UploadFile = File(...)):
+    """Upload and process a document (PDF, DOCX, or LaTeX)"""
+    processor = get_document_processor()
+    if not processor:
+        raise HTTPException(status_code=500, detail="Document processor not initialized")
+    try:
+        result = await processor.process_document(file)
+        return result
+    except Exception as e:
+        logger.error(f"Error processing document: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/documents/{document_id}")
+async def get_document_status(document_id: str):
+    """Get the status of a processed document"""
+    processor = get_document_processor()
+    if not processor:
+        raise HTTPException(status_code=500, detail="Document processor not initialized")
+    try:
+        # Query ChromaDB for document
+        results = processor.collection.get(
+            ids=[document_id],
+            include=["metadatas"]
+        )
+        
+        if not results or not results['ids']:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        return {
+            "id": document_id,
+            "metadata": results['metadatas'][0],
+            "status": "processed"
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving document status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

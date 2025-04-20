@@ -47,14 +47,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/websocket:latest
 
-      - name: Build and push Mastra agent
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/agent/Dockerfile
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/mastra:latest
-
+    
       - name: Generate production docker-compose
         run: |
           cat > docker-compose.prod.yml << 'EOL'
@@ -118,6 +111,13 @@ jobs:
                 - PORT=8000
                 - DATABASE_URL=${DATABASE_URL}
                 - MASTRA_API_URL=http://mastra:3001
+                - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+                - CHROMA_API_KEY=${CHROMA_API_KEY}
+                - CHROMA_HOST=${CHROMA_HOST}
+                - CHROMA_DATABASE=${CHROMA_DATABASE}
+                - CHROMA_TENANT=${CHROMA_TENANT}
+                - GOOGLE_CLOUD_BUCKET_NAME=${GOOGLE_CLOUD_BUCKET_NAME}  
+                - GOOGLE_CLOUD_PROJECT_ID=${GOOGLE_CLOUD_PROJECT_ID}
               labels:
                 - "traefik.enable=true"
                 - "traefik.http.routers.websocket.rule=Host(`ws.core.maketheinternetweirdagain.com`)"
@@ -125,27 +125,7 @@ jobs:
                 - "traefik.http.routers.websocket.tls=true"
                 - "traefik.http.routers.websocket.tls.certresolver=cloudflare"
                 - "traefik.http.services.websocket.loadbalancer.server.port=8000"
-              restart: unless-stopped
-
-            mastra:
-              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/mastra:latest
-              expose:
-                - "3001"
-              environment:
-                - PORT=3001
-                - NODE_ENV=production
-                - LOG_LEVEL=info
-                - DATABASE_URL=${DATABASE_URL}
-              labels:
-                - "traefik.enable=true"
-                - "traefik.http.routers.mastra.rule=Host(`api.core.maketheinternetweirdagain.com`)"
-                - "traefik.http.routers.mastra.entrypoints=websecure"
-                - "traefik.http.routers.mastra.tls=true"
-                - "traefik.http.routers.mastra.tls.certresolver=cloudflare"
-                - "traefik.http.services.mastra.loadbalancer.server.port=3001"
-              depends_on:
-                - websocket
-              restart: unless-stopped
+              restart: unless-stopped          
 
             migrations:
               image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/websocket:latest

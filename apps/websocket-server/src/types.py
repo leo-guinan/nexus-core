@@ -7,20 +7,6 @@ class TranscriptionEventType(str, Enum):
     TRANSCRIPT = "transcript"
     END = "end"
 
-class TranscriptionData(BaseModel):
-    text: Optional[str] = None
-    confidence: Optional[float] = None
-    is_final: Optional[bool] = None
-
-class TranscriptionEvent(BaseModel):
-    type: TranscriptionEventType
-    stream_id: str = Field(..., alias="streamId")
-    timestamp: float
-    data: TranscriptionData
-
-class TranscriptionRequest(BaseModel):
-    event: TranscriptionEvent
-
 class SentimentLabel(str, Enum):
     POSITIVE = "positive"
     NEGATIVE = "negative"
@@ -31,8 +17,20 @@ class Sentiment(BaseModel):
     label: SentimentLabel
 
 class TranscriptionData(BaseModel):
-    transcript: str
+    text: Optional[str] = None
+    confidence: Optional[float] = None
+    is_final: Optional[bool] = None
+    transcript: Optional[str] = None
     sentiment: Optional[Sentiment] = None
+
+class TranscriptionEvent(BaseModel):
+    type: TranscriptionEventType
+    stream_id: str = Field(..., alias="streamId")
+    timestamp: float
+    data: TranscriptionData
+
+class TranscriptionRequest(BaseModel):
+    event: TranscriptionEvent
 
 class TranscriptionResponse(BaseModel):
     success: bool

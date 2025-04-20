@@ -87,3 +87,39 @@ A monorepo containing a full-stack live streaming platform with real-time transc
 ## License
 
 MIT
+
+## Document Processing Feature
+
+### Requirements Checklist
+- [ ] Add new dependencies:
+  - [ ] `python-docx` for DOCX processing
+  - [ ] `PyPDF2` for PDF processing
+  - [ ] `pylatexenc` for LaTeX processing
+  - [ ] `google-cloud-storage` for GCS integration
+  - [ ] `chromadb` for vector storage
+- [ ] Environment Variables:
+  - [ ] `GOOGLE_CLOUD_PROJECT_ID`
+  - [ ] `GOOGLE_CLOUD_BUCKET_NAME`
+  - [ ] `GOOGLE_APPLICATION_CREDENTIALS` (path to service account key)
+  - [ ] `CHROMA_API_KEY`
+  - [ ] `CHROMA_HOST`
+- [ ] API Endpoints:
+  - [ ] POST `/api/documents/upload` for file upload
+  - [ ] GET `/api/documents/{id}` for document status
+- [ ] Storage:
+  - [ ] Set up GCS bucket for document storage
+  - [ ] Configure CORS for GCS bucket
+- [ ] Vector Database:
+  - [ ] Set up ChromaDB collection for document embeddings
+  - [ ] Configure embedding model (e.g., OpenAI's text-embedding-3-small)
+- [ ] Document Processing:
+  - [ ] Implement file type detection
+  - [ ] Add content extraction for each file type
+  - [ ] Add text chunking for large documents
+  - [ ] Implement embedding generation
+  - [ ] Add error handling and validation
+- [ ] Testing:
+  - [ ] Unit tests for file processing
+  - [ ] Integration tests for GCS upload
+  - [ ] Integration tests for ChromaDB
+  - [ ] Load testing for large documents
