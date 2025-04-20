@@ -114,12 +114,12 @@ jobs:
                 - DATABASE_URL=${DATABASE_URL}
                 - MASTRA_API_URL=http://mastra:3001
                 - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+                - GOOGLE_CLOUD_PROJECT_ID=${GOOGLE_CLOUD_PROJECT_ID}
+                - GOOGLE_CLOUD_BUCKET_NAME=${GOOGLE_CLOUD_BUCKET_NAME}
                 - CHROMA_API_KEY=${CHROMA_API_KEY}
                 - CHROMA_HOST=${CHROMA_HOST}
                 - CHROMA_DATABASE=${CHROMA_DATABASE}
                 - CHROMA_TENANT=${CHROMA_TENANT}
-                - GOOGLE_CLOUD_BUCKET_NAME=${GOOGLE_CLOUD_BUCKET_NAME}  
-                - GOOGLE_CLOUD_PROJECT_ID=${GOOGLE_CLOUD_PROJECT_ID}
               labels:
                 - "traefik.enable=true"
                 - "traefik.http.routers.websocket.rule=Host(`ws.core.maketheinternetweirdagain.com`)"
@@ -182,7 +182,7 @@ jobs:
             
             # Create credentials directory and copy service account file
             mkdir -p credentials
-            echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' | jq '.' > credentials/service-account.json
+            echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' | jq -c '.' > credentials/service-account.json
             chmod 600 credentials/service-account.json
             
             # Generate htpasswd for Traefik dashboard without newline
@@ -196,6 +196,12 @@ jobs:
             DOMAIN_NAME=core.maketheinternetweirdagain.com
             TRAEFIK_AUTH=${TRAEFIK_AUTH}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
+            GOOGLE_CLOUD_PROJECT_ID=${{ secrets.GOOGLE_CLOUD_PROJECT_ID }}
+            GOOGLE_CLOUD_BUCKET_NAME=${{ secrets.GOOGLE_CLOUD_BUCKET_NAME }}
+            CHROMA_API_KEY=${{ secrets.CHROMA_API_KEY }}
+            CHROMA_HOST=${{ secrets.CHROMA_HOST }}
+            CHROMA_DATABASE=${{ secrets.CHROMA_DATABASE }}
+            CHROMA_TENANT=${{ secrets.CHROMA_TENANT }}
             EOF
             
             # Replace the TRAEFIK_AUTH placeholder with actual value
