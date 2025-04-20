@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class DocumentProcessor:
     def __init__(self):
         # Initialize GCS client with credentials
-        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "/app/credentials/service-account.json")
         credentials_json = os.getenv("GOOGLE_CREDENTIALS")
         
         logger.info(f"Initializing DocumentProcessor with credentials_path: {credentials_path}")

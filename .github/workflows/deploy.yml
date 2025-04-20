@@ -107,6 +107,8 @@ jobs:
               image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/websocket:latest
               expose:
                 - "8000"
+              volumes:
+                - ./apps/websocket-server/credentials:/root/apps/websocket-server/credentials
               environment:
                 - PORT=8000
                 - DATABASE_URL=${DATABASE_URL}
