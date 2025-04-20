@@ -55,21 +55,27 @@ class DocumentProcessor:
         self.collection = None
         try:
             logger.info("Initializing ChromaDB client...")
-            self.chroma_client = chromadb.HttpClient(
-                ssl=True,
-                host='api.trychroma.com',
-                tenant=os.getenv("CHROMA_TENANT"),
-                database=os.getenv("CHROMA_DATABASE"),
-                headers={
-                    'x-chroma-token': os.getenv("CHROMA_API_KEY")
-                }
-            )
-  
-            logger.info("ChromaDB client initialized successfully")
-            
-            logger.info("Getting or creating 'documents' collection...")
-            self.collection = self.chroma_client.get_or_create_collection("documents")
-            logger.info("Collection initialized successfully")
+            try:
+                self.chroma_client = chromadb.HttpClient(
+                    host='api.trychroma.com',
+                    port=443,
+                    ssl=True,
+                    tenant=os.getenv("CHROMA_TENANT"),
+                    database=os.getenv("CHROMA_DATABASE"),
+                    headers={
+                        'x-chroma-token': os.getenv("CHROMA_API_KEY")
+                    }
+                )
+                logger.info("ChromaDB client initialized successfully")
+                
+                logger.info("Getting or creating 'documents' collection...")
+                self.collection = self.chroma_client.get_or_create_collection("documents")
+                logger.info("Collection initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing ChromaDB: {str(e)}", exc_info=True)
+                logger.warning("Continuing without ChromaDB functionality")
+                self.chroma_client = None
+                self.collection = None
         except Exception as e:
             logger.error(f"Error initializing ChromaDB: {str(e)}", exc_info=True)
             logger.warning("Continuing without ChromaDB functionality")

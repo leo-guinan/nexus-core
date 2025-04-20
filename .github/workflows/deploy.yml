@@ -108,7 +108,7 @@ jobs:
               expose:
                 - "8000"
               volumes:
-                - ./apps/websocket-server/credentials:/root/apps/websocket-server/credentials
+                - ./apps/websocket-server/credentials/service-account.json:/root/apps/websocket-server/credentials/service-account.json
               environment:
                 - PORT=8000
                 - DATABASE_URL=${DATABASE_URL}
