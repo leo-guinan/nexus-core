@@ -50,9 +50,10 @@ services:
       - MASTRA_API_URL=http://mastra:3001
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
       - GOOGLE_CLOUD_BUCKET_NAME=rtmp-documents
-      - CHROMA_TENANT=your-tenant
-      - CHROMA_DATABASE=your-database
-      - CHROMA_API_KEY=your-api-key
+      - CHROMA_HOST=api.trychroma.com
+      - CHROMA_DATABASE=${CHROMA_DATABASE}
+      - CHROMA_TENANT=${CHROMA_TENANT}
+      - CHROMA_API_KEY=${CHROMA_API_KEY}
     volumes:
       - ./apps/websocket-server/credentials/service-account.json:/app/credentials/service-account.json
       - chromadb_data:/data/chromadb

@@ -58,7 +58,7 @@ class DocumentProcessor:
             try:
                 self.chroma_client = chromadb.HttpClient(
                     host='api.trychroma.com',
-                    port=443,
+                    port=8000,
                     ssl=True,
                     tenant=os.getenv("CHROMA_TENANT"),
                     database=os.getenv("CHROMA_DATABASE"),

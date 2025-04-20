@@ -108,7 +108,7 @@ jobs:
               expose:
                 - "8000"
               volumes:
-                - ./apps/websocket-server/credentials/service-account.json:/root/apps/websocket-server/credentials/service-account.json
+                - /opt/rtmp-host/credentials/service-account.json:/app/credentials/service-account.json
               environment:
                 - PORT=8000
                 - DATABASE_URL=${DATABASE_URL}
@@ -179,6 +179,11 @@ jobs:
             mkdir -p traefik
             touch traefik/acme.json
             chmod 600 traefik/acme.json
+            
+            # Create credentials directory and copy service account file
+            mkdir -p credentials
+            echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' > credentials/service-account.json
+            chmod 600 credentials/service-account.json
             
             # Generate htpasswd for Traefik dashboard without newline
             TRAEFIK_AUTH=$(echo '${{ secrets.TRAEFIK_PASSWORD }}' | docker run --rm --stdin httpd:2.4-alpine htpasswd -nbB admin - | tr -d '\n')
