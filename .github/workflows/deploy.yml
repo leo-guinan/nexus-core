@@ -111,7 +111,7 @@ jobs:
                 - PORT=8000
                 - DATABASE_URL=${DATABASE_URL}
                 - MASTRA_API_URL=http://mastra:3001
-                - GOOGLE_APPLICATION_CREDENTIALS=/apps/websocket-server/credentials/service-account.json
+                - GOOGLE_APPLICATION_CREDENTIALS=/root/apps/websocket-server/credentials/service-account.json
                 - CHROMA_API_KEY=${CHROMA_API_KEY}
                 - CHROMA_HOST=${CHROMA_HOST}
                 - CHROMA_DATABASE=${CHROMA_DATABASE}
