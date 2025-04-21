@@ -164,6 +164,12 @@ async def webhook(data: dict):
     logger.info(f"Received webhook: {data}")
     return {"status": "ok"}
 
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint"""
+    logger.info("Health check requested")
+    return {"status": "ok", "service": "websocket-server"}
+
 @api_router.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
     """Upload and process a document (PDF, DOCX, or LaTeX)"""

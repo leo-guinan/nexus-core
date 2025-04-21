@@ -130,15 +130,15 @@ jobs:
                 - "traefik.http.routers.websocket.tls=true"
                 - "traefik.http.routers.websocket.tls.certresolver=cloudflare"
                 - "traefik.http.routers.websocket.service=websocket-service"
-                # HTTP API routes
-                - "traefik.http.routers.websocket-api.rule=Host(`core.maketheinternetweirdagain.com`) && PathPrefix(`/api`)"
-                - "traefik.http.routers.websocket-api.entrypoints=websecure"
-                - "traefik.http.routers.websocket-api.tls=true"
-                - "traefik.http.routers.websocket-api.tls.certresolver=cloudflare"
-                - "traefik.http.routers.websocket-api.service=websocket-service"
+                # HTTP routes
+                - "traefik.http.routers.websocket-http.rule=Host(`core.maketheinternetweirdagain.com`)"
+                - "traefik.http.routers.websocket-http.entrypoints=websecure"
+                - "traefik.http.routers.websocket-http.tls=true"
+                - "traefik.http.routers.websocket-http.tls.certresolver=cloudflare"
+                - "traefik.http.routers.websocket-http.service=websocket-service"
                 # Strip prefix for API routes
                 - "traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api"
-                - "traefik.http.routers.websocket-api.middlewares=strip-api-prefix"
+                - "traefik.http.routers.websocket-http.middlewares=strip-api-prefix"
               restart: unless-stopped          
 
             migrations:
