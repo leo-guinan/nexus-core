@@ -3,7 +3,7 @@ import json
 import logging
 from typing import List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from .api import MastraAPI, DocumentProcessor
 
@@ -42,6 +42,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create API router with prefix
+api_router = APIRouter(prefix="/api")
 
 class ConnectionManager:
     def __init__(self):
@@ -161,20 +164,24 @@ async def webhook(data: dict):
     logger.info(f"Received webhook: {data}")
     return {"status": "ok"}
 
-@app.post("/api/documents/upload")
+@api_router.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
     """Upload and process a document (PDF, DOCX, or LaTeX)"""
+    logger.info(f"Received upload request for file: {file.filename}")
     processor = get_document_processor()
     if not processor:
+        logger.error("Document processor not initialized")
         raise HTTPException(status_code=500, detail="Document processor not initialized")
     try:
+        logger.info("Processing document...")
         result = await processor.process_document(file)
+        logger.info(f"Document processed successfully: {result}")
         return result
     except Exception as e:
         logger.error(f"Error processing document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/documents/{document_id}")
+@api_router.get("/documents/{document_id}")
 async def get_document_status(document_id: str):
     """Get the status of a processed document"""
     processor = get_document_processor()
@@ -198,6 +205,9 @@ async def get_document_status(document_id: str):
     except Exception as e:
         logger.error(f"Error retrieving document status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# Include API router
+app.include_router(api_router)
 
 if __name__ == "__main__":
     import uvicorn
