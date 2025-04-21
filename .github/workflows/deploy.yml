@@ -136,9 +136,6 @@ jobs:
                 - "traefik.http.routers.websocket-http.tls=true"
                 - "traefik.http.routers.websocket-http.tls.certresolver=cloudflare"
                 - "traefik.http.routers.websocket-http.service=websocket-service"
-                # Strip prefix for API routes
-                - "traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api"
-                - "traefik.http.routers.websocket-http.middlewares=strip-api-prefix"
               restart: unless-stopped          
 
             migrations:

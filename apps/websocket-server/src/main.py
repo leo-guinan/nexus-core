@@ -43,8 +43,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create API router with prefix
-api_router = APIRouter(prefix="/api")
+# Create main router
+main_router = APIRouter()
 
 class ConnectionManager:
     def __init__(self):
@@ -158,19 +158,19 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-@app.post("/webhook")
+@main_router.post("/webhook")
 async def webhook(data: dict):
     """Webhook endpoint for RTMP events"""
     logger.info(f"Received webhook: {data}")
     return {"status": "ok"}
 
-@app.get("/health")
+@main_router.get("/health")
 async def health_check():
     """Simple health check endpoint"""
     logger.info("Health check requested")
     return {"status": "ok", "service": "websocket-server"}
 
-@api_router.post("/documents/upload")
+@main_router.post("/api/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
     """Upload and process a document (PDF, DOCX, or LaTeX)"""
     logger.info(f"Received upload request for file: {file.filename}")
@@ -187,7 +187,7 @@ async def upload_document(file: UploadFile = File(...)):
         logger.error(f"Error processing document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/documents/{document_id}")
+@main_router.get("/api/documents/{document_id}")
 async def get_document_status(document_id: str):
     """Get the status of a processed document"""
     processor = get_document_processor()
@@ -212,8 +212,8 @@ async def get_document_status(document_id: str):
         logger.error(f"Error retrieving document status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-# Include API router
-app.include_router(api_router)
+# Include main router
+app.include_router(main_router)
 
 if __name__ == "__main__":
     import uvicorn
