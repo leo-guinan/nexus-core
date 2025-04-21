@@ -127,6 +127,11 @@ jobs:
                 - "traefik.http.routers.websocket.tls=true"
                 - "traefik.http.routers.websocket.tls.certresolver=cloudflare"
                 - "traefik.http.services.websocket.loadbalancer.server.port=8000"
+                - "traefik.http.routers.websocket-api.rule=Host(`core.maketheinternetweirdagain.com`)"
+                - "traefik.http.routers.websocket-api.entrypoints=websecure"
+                - "traefik.http.routers.websocket-api.tls=true"
+                - "traefik.http.routers.websocket-api.tls.certresolver=cloudflare"
+                - "traefik.http.services.websocket-api.loadbalancer.server.port=8000"
               restart: unless-stopped          
 
             migrations:
