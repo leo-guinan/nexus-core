@@ -90,6 +90,120 @@ MIT
 
 ## Document Processing Feature
 
+### API Documentation
+
+#### Document Upload
+```http
+POST /api/documents/upload
+Content-Type: multipart/form-data
+
+Parameters:
+- file: File (PDF, DOCX, or TEX)
+- user_id: string
+```
+
+Response:
+```json
+{
+  "id": "uuid",
+  "filename": "example.pdf",
+  "gcs_path": "documents/uuid/example.pdf",
+  "status": "processed",
+  "chroma_status": "processed",
+  "chunks_processed": 5,
+  "total_chunks": 5
+}
+```
+
+#### Get User Documents
+```http
+GET /api/documents?user_id={user_id}
+```
+
+Response:
+```json
+{
+  "documents": [
+    {
+      "id": "uuid",
+      "filename": "example.pdf",
+      "file_type": "pdf",
+      "gcs_path": "documents/uuid/example.pdf",
+      "chroma_status": "processed",
+      "chunks_processed": 5,
+      "total_chunks": 5,
+      "created_at": "2024-04-01T12:00:00",
+      "updated_at": "2024-04-01T12:00:00"
+    }
+  ]
+}
+```
+
+#### Get Document by ID
+```http
+GET /api/documents/{document_id}
+```
+
+Response:
+```json
+{
+  "id": "uuid",
+  "user_id": "user123",
+  "filename": "example.pdf",
+  "file_type": "pdf",
+  "gcs_path": "documents/uuid/example.pdf",
+  "fulltext_content": "Full document text...",
+  "chroma_status": "processed",
+  "chunks_processed": 5,
+  "total_chunks": 5,
+  "created_at": "2024-04-01T12:00:00",
+  "updated_at": "2024-04-01T12:00:00",
+  "chunks": [
+    {
+      "id": "uuid_chunk_0",
+      "content": "Chunk text...",
+      "metadata": {
+        "filename": "example.pdf",
+        "type": "pdf",
+        "document_id": "uuid",
+        "chunk_id": "uuid_chunk_0",
+        "chunk_index": 0,
+        "total_chunks": 5,
+        "user_id": "user123"
+      }
+    }
+  ]
+}
+```
+
+#### Update Document
+```http
+PATCH /api/documents/{document_id}
+Content-Type: application/json
+
+{
+  "filename": "new_name.pdf",
+  "chroma_status": "processed",
+  "chunks_processed": 6,
+  "total_chunks": 6
+}
+```
+
+Response: Returns the updated document object (same as GET /api/documents/{document_id})
+
+#### Delete Document
+```http
+DELETE /api/documents/{document_id}
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "message": "Document deleted successfully"
+}
+```
+
 ### Requirements Checklist
 - [ ] Add new dependencies:
   - [ ] `python-docx` for DOCX processing

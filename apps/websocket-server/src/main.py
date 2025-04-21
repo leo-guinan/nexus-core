@@ -3,7 +3,7 @@ import json
 import logging
 from typing import List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, APIRouter
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException, APIRouter, Form
 from fastapi.middleware.cors import CORSMiddleware
 from .api import MastraAPI, DocumentProcessor
 
@@ -171,45 +171,78 @@ async def health_check():
     return {"status": "ok", "service": "websocket-server"}
 
 @main_router.post("/api/documents/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), user_id: str = Form(...)):
     """Upload and process a document (PDF, DOCX, or LaTeX)"""
-    logger.info(f"Received upload request for file: {file.filename}")
+    logger.info(f"Received upload request for file: {file.filename} from user: {user_id}")
     processor = get_document_processor()
     if not processor:
         logger.error("Document processor not initialized")
         raise HTTPException(status_code=500, detail="Document processor not initialized")
     try:
         logger.info("Processing document...")
-        result = await processor.process_document(file)
+        result = await processor.process_document(file, user_id)
         logger.info(f"Document processed successfully: {result}")
         return result
     except Exception as e:
         logger.error(f"Error processing document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@main_router.get("/api/documents/{document_id}")
-async def get_document_status(document_id: str):
-    """Get the status of a processed document"""
+@main_router.get("/api/documents")
+async def get_documents(user_id: str):
+    """Get all documents for a user"""
     processor = get_document_processor()
     if not processor:
         raise HTTPException(status_code=500, detail="Document processor not initialized")
     try:
-        # Query ChromaDB for document
-        results = processor.collection.get(
-            ids=[document_id],
-            include=["metadatas"]
-        )
-        
-        if not results or not results['ids']:
-            raise HTTPException(status_code=404, detail="Document not found")
-            
-        return {
-            "id": document_id,
-            "metadata": results['metadatas'][0],
-            "status": "processed"
-        }
+        documents = await processor.get_user_documents(user_id)
+        return {"documents": documents}
     except Exception as e:
-        logger.error(f"Error retrieving document status: {e}", exc_info=True)
+        logger.error(f"Error retrieving documents: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@main_router.get("/api/documents/{document_id}")
+async def get_document_status(document_id: str):
+    """Get the status and content of a processed document"""
+    processor = get_document_processor()
+    if not processor:
+        raise HTTPException(status_code=500, detail="Document processor not initialized")
+    try:
+        document = await processor.get_document_by_id(document_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return document
+    except Exception as e:
+        logger.error(f"Error retrieving document: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@main_router.patch("/api/documents/{document_id}")
+async def update_document(document_id: str, updates: dict):
+    """Update a document's metadata"""
+    processor = get_document_processor()
+    if not processor:
+        raise HTTPException(status_code=500, detail="Document processor not initialized")
+    try:
+        document = await processor.update_document(document_id, updates)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return document
+    except Exception as e:
+        logger.error(f"Error updating document: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@main_router.delete("/api/documents/{document_id}")
+async def delete_document(document_id: str):
+    """Delete a document and its associated data"""
+    processor = get_document_processor()
+    if not processor:
+        raise HTTPException(status_code=500, detail="Document processor not initialized")
+    try:
+        success = await processor.delete_document(document_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return {"status": "success", "message": "Document deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # Include main router
