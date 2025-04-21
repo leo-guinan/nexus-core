@@ -122,16 +122,21 @@ jobs:
                 - CHROMA_TENANT=${CHROMA_TENANT}
               labels:
                 - "traefik.enable=true"
+                # WebSocket route
                 - "traefik.http.routers.websocket.rule=Host(`ws.core.maketheinternetweirdagain.com`)"
                 - "traefik.http.routers.websocket.entrypoints=websecure"
                 - "traefik.http.routers.websocket.tls=true"
                 - "traefik.http.routers.websocket.tls.certresolver=cloudflare"
                 - "traefik.http.services.websocket.loadbalancer.server.port=8000"
-                - "traefik.http.routers.websocket-api.rule=Host(`core.maketheinternetweirdagain.com`)"
+                # HTTP API routes
+                - "traefik.http.routers.websocket-api.rule=Host(`core.maketheinternetweirdagain.com`) && PathPrefix(`/api`)"
                 - "traefik.http.routers.websocket-api.entrypoints=websecure"
                 - "traefik.http.routers.websocket-api.tls=true"
                 - "traefik.http.routers.websocket-api.tls.certresolver=cloudflare"
                 - "traefik.http.services.websocket-api.loadbalancer.server.port=8000"
+                # Strip prefix for API routes
+                - "traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api"
+                - "traefik.http.routers.websocket-api.middlewares=strip-api-prefix"
               restart: unless-stopped          
 
             migrations:
