@@ -134,54 +134,49 @@ class DocumentProcessor:
             total_chunks = 0
             
             if self.collection:
-                try:
-                    # Split text into chunks
-                    chunks = split_text_into_chunks(text)
-                    total_chunks = len(chunks)
-                    logger.info(f"Split document into {total_chunks} chunks")
+                # Split text into chunks
+                chunks = split_text_into_chunks(text)
+                total_chunks = len(chunks)
+                logger.info(f"Split document into {total_chunks} chunks")
+                
+                # Store each chunk with metadata
+                chunk_ids = []
+                for i, chunk in enumerate(chunks):
+                    chunk_id = f"{file_id}_chunk_{i}"
+                    chunk_ids.append(chunk_id)
                     
-                    # Store each chunk with metadata
-                    chunk_ids = []
-                    for i, chunk in enumerate(chunks):
-                        chunk_id = f"{file_id}_chunk_{i}"
-                        chunk_ids.append(chunk_id)
-                        
-                        metadata = {
-                            "filename": file.filename,
-                            "type": file_ext,
-                            "document_id": file_id,
-                            "chunk_id": chunk_id,
-                            "chunk_index": i,
-                            "total_chunks": total_chunks
-                        }
-                        
-                        try:
-                            self.collection.add(
-                                documents=[chunk],
-                                ids=[chunk_id],
-                                metadatas=[metadata]
-                            )
-                            chunks_processed += 1
-                            logger.info(f"Successfully stored chunk {i+1}/{total_chunks}")
-                        except Exception as e:
-                            error_msg = str(e)
-                            if "Quota exceeded" in error_msg:
-                                logger.warning(f"ChromaDB quota exceeded for chunk {chunk_id}. Stopping chunk processing.")
-                                break
-                            else:
-                                logger.error(f"Error storing chunk in ChromaDB: {error_msg}", exc_info=True)
-                                continue
+                    metadata = {
+                        "filename": file.filename,
+                        "type": file_ext,
+                        "document_id": file_id,
+                        "chunk_id": chunk_id,
+                        "chunk_index": i,
+                        "total_chunks": total_chunks
+                    }
                     
-                    if chunks_processed == total_chunks:
-                        chroma_status = "processed"
-                    elif chunks_processed > 0:
-                        chroma_status = "partially_processed"
-                    else:
-                        chroma_status = "quota_exceeded"
-                        
-                except Exception as e:
-                    logger.error(f"Error processing document chunks: {str(e)}", exc_info=True)
-                    chroma_status = "error"
+                    try:
+                        self.collection.add(
+                            documents=[chunk],
+                            ids=[chunk_id],
+                            metadatas=[metadata]
+                        )
+                        chunks_processed += 1
+                        logger.info(f"Successfully stored chunk {i+1}/{total_chunks}")
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "Quota exceeded" in error_msg or "429" in error_msg:
+                            logger.warning(f"ChromaDB quota exceeded for chunk {chunk_id}. Stopping chunk processing.")
+                            break
+                        else:
+                            logger.error(f"Error storing chunk in ChromaDB: {error_msg}", exc_info=True)
+                            continue
+                
+                if chunks_processed == total_chunks:
+                    chroma_status = "processed"
+                elif chunks_processed > 0:
+                    chroma_status = "partially_processed"
+                else:
+                    chroma_status = "quota_exceeded"
             
             return {
                 "id": file_id,
