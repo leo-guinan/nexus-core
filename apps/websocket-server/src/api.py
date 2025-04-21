@@ -2,7 +2,7 @@ import aiohttp
 import os
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import UploadFile, HTTPException
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -13,8 +13,34 @@ from PyPDF2 import PdfReader
 from pylatexenc.latex2text import LatexNodes2Text
 import uuid
 import tempfile
+import re
 
 logger = logging.getLogger(__name__)
+
+def split_text_into_chunks(text: str, max_chunk_size: int = 4000) -> List[str]:
+    """Split text into chunks of approximately max_chunk_size bytes."""
+    # First split by paragraphs
+    paragraphs = text.split('\n\n')
+    chunks = []
+    current_chunk = []
+    current_size = 0
+    
+    for para in paragraphs:
+        para_size = len(para.encode('utf-8'))
+        if current_size + para_size > max_chunk_size and current_chunk:
+            # Join current chunk and add to chunks
+            chunks.append('\n\n'.join(current_chunk))
+            current_chunk = [para]
+            current_size = para_size
+        else:
+            current_chunk.append(para)
+            current_size += para_size
+    
+    # Add the last chunk if it exists
+    if current_chunk:
+        chunks.append('\n\n'.join(current_chunk))
+    
+    return chunks
 
 class DocumentProcessor:
     def __init__(self):
@@ -103,21 +129,62 @@ class DocumentProcessor:
             text = self._extract_text(temp_file.name, file_ext)
             
             # Store in ChromaDB if available
+            chroma_status = "skipped"
+            chunks_processed = 0
             if self.collection:
                 try:
-                    self.collection.add(
-                        documents=[text],
-                        ids=[file_id],
-                        metadatas=[{"filename": file.filename, "type": file_ext}]
-                    )
+                    # Split text into chunks
+                    chunks = split_text_into_chunks(text)
+                    logger.info(f"Split document into {len(chunks)} chunks")
+                    
+                    # Store each chunk with metadata
+                    chunk_ids = []
+                    for i, chunk in enumerate(chunks):
+                        chunk_id = f"{file_id}_chunk_{i}"
+                        chunk_ids.append(chunk_id)
+                        
+                        metadata = {
+                            "filename": file.filename,
+                            "type": file_ext,
+                            "document_id": file_id,
+                            "chunk_id": chunk_id,
+                            "chunk_index": i,
+                            "total_chunks": len(chunks)
+                        }
+                        
+                        try:
+                            self.collection.add(
+                                documents=[chunk],
+                                ids=[chunk_id],
+                                metadatas=[metadata]
+                            )
+                            chunks_processed += 1
+                        except Exception as e:
+                            if "Quota exceeded" in str(e):
+                                logger.warning(f"ChromaDB quota exceeded for chunk {chunk_id}. Stopping chunk processing.")
+                                break
+                            else:
+                                logger.error(f"Error storing chunk in ChromaDB: {str(e)}", exc_info=True)
+                    
+                    if chunks_processed == len(chunks):
+                        chroma_status = "processed"
+                    elif chunks_processed > 0:
+                        chroma_status = "partially_processed"
+                    else:
+                        chroma_status = "quota_exceeded"
+                        
                 except Exception as e:
-                    logger.error(f"Error storing in ChromaDB: {str(e)}", exc_info=True)
+                    logger.error(f"Error processing document chunks: {str(e)}", exc_info=True)
+                    chroma_status = "error"
             
             return {
                 "id": file_id,
                 "filename": file.filename,
                 "gcs_path": blob_name,
-                "status": "processed"
+                "status": "processed",
+                "chroma_status": chroma_status,
+                "chunks_processed": chunks_processed,
+                "total_chunks": len(chunks) if self.collection else 0
             }
 
     def _extract_text(self, file_path: str, file_type: str) -> str:
