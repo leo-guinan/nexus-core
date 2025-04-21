@@ -131,11 +131,14 @@ class DocumentProcessor:
             # Store in ChromaDB if available
             chroma_status = "skipped"
             chunks_processed = 0
+            total_chunks = 0
+            
             if self.collection:
                 try:
                     # Split text into chunks
                     chunks = split_text_into_chunks(text)
-                    logger.info(f"Split document into {len(chunks)} chunks")
+                    total_chunks = len(chunks)
+                    logger.info(f"Split document into {total_chunks} chunks")
                     
                     # Store each chunk with metadata
                     chunk_ids = []
@@ -149,7 +152,7 @@ class DocumentProcessor:
                             "document_id": file_id,
                             "chunk_id": chunk_id,
                             "chunk_index": i,
-                            "total_chunks": len(chunks)
+                            "total_chunks": total_chunks
                         }
                         
                         try:
@@ -159,14 +162,17 @@ class DocumentProcessor:
                                 metadatas=[metadata]
                             )
                             chunks_processed += 1
+                            logger.info(f"Successfully stored chunk {i+1}/{total_chunks}")
                         except Exception as e:
-                            if "Quota exceeded" in str(e):
+                            error_msg = str(e)
+                            if "Quota exceeded" in error_msg:
                                 logger.warning(f"ChromaDB quota exceeded for chunk {chunk_id}. Stopping chunk processing.")
                                 break
                             else:
-                                logger.error(f"Error storing chunk in ChromaDB: {str(e)}", exc_info=True)
+                                logger.error(f"Error storing chunk in ChromaDB: {error_msg}", exc_info=True)
+                                continue
                     
-                    if chunks_processed == len(chunks):
+                    if chunks_processed == total_chunks:
                         chroma_status = "processed"
                     elif chunks_processed > 0:
                         chroma_status = "partially_processed"
@@ -184,7 +190,7 @@ class DocumentProcessor:
                 "status": "processed",
                 "chroma_status": chroma_status,
                 "chunks_processed": chunks_processed,
-                "total_chunks": len(chunks) if self.collection else 0
+                "total_chunks": total_chunks
             }
 
     def _extract_text(self, file_path: str, file_type: str) -> str:
