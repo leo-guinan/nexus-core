@@ -200,6 +200,10 @@ jobs:
             TRAEFIK_AUTH=$(docker run --rm httpd:2.4-alpine htpasswd -nbB admin '${{ secrets.TRAEFIK_PASSWORD }}' | tr -d '\n')
             echo "Generated auth string: ${TRAEFIK_AUTH:0:10}..."  # Show first 10 chars for debugging
             
+            # Clean up disk space
+            echo "Cleaning up disk space..."
+            docker system prune -f
+            
             # Set up environment (careful with quoting)
             cat << 'EOF' > .env
             GLADIA_API_KEY=${{ secrets.GLADIA_API_KEY }}
@@ -229,6 +233,10 @@ jobs:
             
             # Update docker-compose.prod.yml with the actual auth value
             sed -i "s|\${TRAEFIK_AUTH}|${TRAEFIK_AUTH}|g" docker-compose.prod.yml
+            
+            # Verify the substitution worked
+            echo "Verifying Traefik auth configuration after substitution:"
+            grep "traefik.http.middlewares.auth.basicauth.users" docker-compose.prod.yml
             
             # Pull new images
             docker compose -f docker-compose.prod.yml pull
