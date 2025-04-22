@@ -130,20 +130,12 @@ jobs:
                 - "traefik.http.routers.websocket.tls=true"
                 - "traefik.http.routers.websocket.tls.certresolver=cloudflare"
                 - "traefik.http.routers.websocket.service=websocket-service"
-                # API routes
-                - "traefik.http.routers.websocket-api.rule=Host(`core.maketheinternetweirdagain.com`) && PathPrefix(`/api`)"
-                - "traefik.http.routers.websocket-api.entrypoints=websecure"
-                - "traefik.http.routers.websocket-api.tls=true"
-                - "traefik.http.routers.websocket-api.tls.certresolver=cloudflare"
-                - "traefik.http.routers.websocket-api.service=websocket-service"
-                - "traefik.http.routers.websocket-api.middlewares=strip-api"
-                - "traefik.http.middlewares.strip-api.stripprefix.prefixes=/api"
-                # Default route (for non-API requests)
-                - "traefik.http.routers.websocket-default.rule=Host(`core.maketheinternetweirdagain.com`) && !PathPrefix(`/api`)"
-                - "traefik.http.routers.websocket-default.entrypoints=websecure"
-                - "traefik.http.routers.websocket-default.tls=true"
-                - "traefik.http.routers.websocket-default.tls.certresolver=cloudflare"
-                - "traefik.http.routers.websocket-default.service=websocket-service"
+                # HTTP routes
+                - "traefik.http.routers.websocket-http.rule=Host(`core.maketheinternetweirdagain.com`)"
+                - "traefik.http.routers.websocket-http.entrypoints=websecure"
+                - "traefik.http.routers.websocket-http.tls=true"
+                - "traefik.http.routers.websocket-http.tls.certresolver=cloudflare"
+                - "traefik.http.routers.websocket-http.service=websocket-service"
               restart: unless-stopped          
 
             migrations:

@@ -44,7 +44,7 @@ app.add_middleware(
 )
 
 # Create main router
-main_router = APIRouter()
+main_router = APIRouter(prefix="/api")
 
 class ConnectionManager:
     def __init__(self):
