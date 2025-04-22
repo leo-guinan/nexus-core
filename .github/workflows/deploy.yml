@@ -136,6 +136,14 @@ jobs:
                 - "traefik.http.routers.websocket-http.tls=true"
                 - "traefik.http.routers.websocket-http.tls.certresolver=cloudflare"
                 - "traefik.http.routers.websocket-http.service=websocket-service"
+                # API routes
+                - "traefik.http.routers.websocket-api.rule=Host(`core.maketheinternetweirdagain.com`) && PathPrefix(`/api`)"
+                - "traefik.http.routers.websocket-api.entrypoints=websecure"
+                - "traefik.http.routers.websocket-api.tls=true"
+                - "traefik.http.routers.websocket-api.tls.certresolver=cloudflare"
+                - "traefik.http.routers.websocket-api.service=websocket-service"
+                - "traefik.http.routers.websocket-api.middlewares=strip-api"
+                - "traefik.http.middlewares.strip-api.stripprefix.prefixes=/api"
               restart: unless-stopped          
 
             migrations:

@@ -170,7 +170,7 @@ async def health_check():
     logger.info("Health check requested")
     return {"status": "ok", "service": "websocket-server"}
 
-@main_router.post("/api/documents/upload")
+@main_router.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...), user_id: str = Form(...)):
     """Upload and process a document (PDF, DOCX, or LaTeX)"""
     logger.info(f"Received upload request for file: {file.filename} from user: {user_id}")
@@ -187,7 +187,7 @@ async def upload_document(file: UploadFile = File(...), user_id: str = Form(...)
         logger.error(f"Error processing document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@main_router.get("/api/documents")
+@main_router.get("/documents")
 async def get_documents(user_id: str):
     """Get all documents for a user"""
     processor = get_document_processor()
@@ -200,7 +200,7 @@ async def get_documents(user_id: str):
         logger.error(f"Error retrieving documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@main_router.get("/api/documents/{document_id}")
+@main_router.get("/documents/{document_id}")
 async def get_document_status(document_id: str):
     """Get the status and content of a processed document"""
     processor = get_document_processor()
@@ -215,7 +215,7 @@ async def get_document_status(document_id: str):
         logger.error(f"Error retrieving document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@main_router.patch("/api/documents/{document_id}")
+@main_router.patch("/documents/{document_id}")
 async def update_document(document_id: str, updates: dict):
     """Update a document's metadata"""
     processor = get_document_processor()
@@ -230,7 +230,7 @@ async def update_document(document_id: str, updates: dict):
         logger.error(f"Error updating document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@main_router.delete("/api/documents/{document_id}")
+@main_router.delete("/documents/{document_id}")
 async def delete_document(document_id: str):
     """Delete a document and its associated data"""
     processor = get_document_processor()
