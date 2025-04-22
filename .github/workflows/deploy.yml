@@ -227,12 +227,9 @@ jobs:
             echo "Checking .env file structure (redacted values):"
             sed 's/=.*/=REDACTED/' .env
             
-            # Debug: Show Traefik auth configuration
-            echo "Checking Traefik auth configuration:"
-            grep "traefik.http.middlewares.auth.basicauth.users" docker-compose.prod.yml
-            
             # Update docker-compose.prod.yml with the actual auth value
-            sed -i "s|\${TRAEFIK_AUTH}|${TRAEFIK_AUTH}|g" docker-compose.prod.yml
+            echo "Updating docker-compose.prod.yml with Traefik auth..."
+            sed -i "s|traefik.http.middlewares.auth.basicauth.users=\${TRAEFIK_AUTH}|traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_AUTH}|g" docker-compose.prod.yml
             
             # Verify the substitution worked
             echo "Verifying Traefik auth configuration after substitution:"
