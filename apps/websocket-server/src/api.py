@@ -20,7 +20,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def split_text_into_chunks(text: str, max_chunk_size: int = 4000) -> List[str]:
+def split_text_into_chunks(text: str, max_chunk_size: int = 3000) -> List[str]:
     """Split text into chunks of approximately max_chunk_size bytes."""
     # First split by paragraphs
     paragraphs = text.split('\n\n')
