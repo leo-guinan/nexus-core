@@ -157,13 +157,13 @@ class DocumentProcessor:
                     chunk_ids.append(chunk_id)
                     
                     metadata = {
-                        "filename": file.filename,
-                        "type": file_ext,
-                        "document_id": file_id,
-                        "chunk_id": chunk_id,
-                        "chunk_index": i,
-                        "total_chunks": total_chunks,
-                        "user_id": user_id
+                        "f": file.filename,  # filename
+                        "t": file_ext,       # type
+                        "d": file_id,        # document_id
+                        "c": chunk_id,       # chunk_id
+                        "i": i,              # chunk_index
+                        "n": total_chunks,   # total_chunks
+                        "u": user_id         # user_id
                     }
                     
                     try:
