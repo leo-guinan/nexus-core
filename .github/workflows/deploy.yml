@@ -197,7 +197,7 @@ jobs:
             
             # Generate htpasswd for Traefik dashboard
             echo "Generating Traefik auth credentials..."
-            TRAEFIK_AUTH=$(echo '${{ secrets.TRAEFIK_PASSWORD }}' | docker run --rm --stdin httpd:2.4-alpine htpasswd -nbB admin - | tr -d '\n')
+            TRAEFIK_AUTH=$(docker run --rm httpd:2.4-alpine htpasswd -nbB admin '${{ secrets.TRAEFIK_PASSWORD }}' | tr -d '\n')
             echo "Generated auth string: ${TRAEFIK_AUTH:0:10}..."  # Show first 10 chars for debugging
             
             # Set up environment (careful with quoting)
